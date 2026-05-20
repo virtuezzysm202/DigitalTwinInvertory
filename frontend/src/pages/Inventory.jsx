@@ -19,18 +19,12 @@ import {
 } from "lucide-react";
 
 export default function Inventory() {
-  // =========================
-  // STATE
-  // =========================
-
   const [inventoryData, setInventoryData] = useState([]);
   const [activeItem, setActiveItem] = useState(null);
   const [search, setSearch] = useState("");
 
-  // MODAL
   const [showModal, setShowModal] = useState(false);
 
-  // FORM
   const [formData, setFormData] = useState({
     item_code: "",
     name: "",
@@ -40,10 +34,6 @@ export default function Inventory() {
     unit_value: "",
     description: "",
   });
-
-  // =========================
-  // FETCH INVENTORY
-  // =========================
 
   useEffect(() => {
     fetchInventory();
@@ -63,10 +53,6 @@ export default function Inventory() {
     }
   };
 
-  // =========================
-  // HANDLE FORM
-  // =========================
-
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -78,16 +64,12 @@ export default function Inventory() {
     e.preventDefault();
 
     try {
-      // UPDATE
       if (formData.id) {
         await axios.put(
           `http://localhost:5000/api/inventory/${formData.id}`,
           formData
         );
-      }
-
-      // CREATE
-      else {
+      } else {
         await axios.post("http://localhost:5000/api/inventory", formData);
       }
 
@@ -109,10 +91,6 @@ export default function Inventory() {
     }
   };
 
-  // =========================
-  // STATUS COLOR
-  // =========================
-
   const getStatusColor = (status) => {
     if (status === "In Stock") {
       return "bg-green-50 text-green-700 border-green-200";
@@ -125,17 +103,9 @@ export default function Inventory() {
     return "bg-red-50 text-red-700 border-red-200";
   };
 
-  // =========================
-  // SEARCH FILTER
-  // =========================
-
   const filteredInventory = inventoryData.filter((item) =>
     item.name?.toLowerCase().includes(search.toLowerCase())
   );
-
-  // =========================
-  // STATS
-  // =========================
 
   const totalItems = inventoryData.length;
 
@@ -148,10 +118,12 @@ export default function Inventory() {
     0
   );
 
+  const totalZones = inventoryData.length > 0 
+    ? new Set(inventoryData.filter(item => item.location).map(item => item.location)).size 
+    : 0;
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gray-50/50 space-y-4">
-      {/* HEADER */}
-
       <div className="flex flex-col lg:flex-row justify-between lg:items-start gap-4 shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Inventory</h1>
@@ -174,8 +146,6 @@ export default function Inventory() {
           </button>
         </div>
       </div>
-
-      {/* STATS */}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
@@ -236,12 +206,12 @@ export default function Inventory() {
               Zones
             </p>
 
-            <span className="text-2xl font-bold text-gray-800">3</span>
+            <span className="text-2xl font-bold text-gray-800">
+              {totalZones}
+            </span>
           </div>
         </div>
       </div>
-
-      {/* TOOLBAR */}
 
       <div className="flex flex-col lg:flex-row justify-between lg:items-center shrink-0 gap-4 mt-2">
         <div className="w-full lg:flex-1 relative lg:max-w-md">
@@ -265,8 +235,6 @@ export default function Inventory() {
           </button>
         </div>
       </div>
-
-      {/* TABLE */}
 
       <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto w-full">
@@ -344,8 +312,6 @@ export default function Inventory() {
           </table>
         </div>
       </div>
-
-      {/* MODAL */}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
