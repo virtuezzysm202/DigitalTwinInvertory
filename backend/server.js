@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
+const inventoryRoutes = require('./routes/inventoryRoutes');  
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.use(express.json()); // Menerima body request dalam bentuk JSON
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 // Test Route
 app.get('/', (req, res) => {

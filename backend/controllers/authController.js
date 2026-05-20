@@ -32,20 +32,58 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+    // debug
+    console.log("BODY:", req.body);
+    console.log("EMAIL:", email);
+    console.log("PASSWORD:", password);
+
+    // validasi input
+    if (!email || !password) {
+      return res.status(400).json({
+        message: 'Email dan password wajib diisi!'
+      });
+    }
+
+    // cek user
+    const [users] = await db.query(
+      'SELECT * FROM users WHERE email = ?',
+      [email]
+    );
+
     if (users.length === 0) {
-      return res.status(404).json({ message: 'Email tidak ditemukan!' });
+      return res.status(404).json({
+        message: 'Email tidak ditemukan!'
+      });
     }
 
     const user = users[0];
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Password salah!' });
+    // cek password database
+    if (!user.PASSWORD) {
+      return res.status(500).json({
+        message: 'Password user kosong di database'
+      });
     }
 
+    // compare password
+    const isMatch = await bcrypt.compare(
+      password,
+      user.PASSWORD
+    );
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: 'Password salah!'
+      });
+    }
+
+    // token
     const token = jwt.sign(
-      { id: user.id, email: user.email, name: user.name },
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name
+      },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
@@ -53,10 +91,18 @@ exports.login = async (req, res) => {
     res.status(200).json({
       message: 'Login berhasil!',
       token,
-      user: { id: user.id, name: user.name, email: user.email }
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email
+      }
     });
+
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+
+    res.status(500).json({
+      message: 'Terjadi kesalahan pada server'
+    });
   }
 };
