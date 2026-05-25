@@ -1,22 +1,28 @@
 const inventoryService = require('../services/inventory/inventoryService');
 
-// Ambil semua daftar barang (Data dibaca langsung dari berkas .md via service)
+// Ambil semua daftar barang (Data dibaca spesifik per user via service)
 exports.getAllInventory = async (req, res) => {
   try {
-    const items = await inventoryService.getInventoryFromMarkdown() || [];
+    const userId = req.user.id; // ⬅️ FIX: Ambil ID user dari JWT Token
+
+    // 1. Ambil metadata file markdown milik user ini
+    const fileMeta = await inventoryService.getMarkdownMetadata(userId);
     
-    // 🔽 LOGIKA BARU: Hitung ringkasan statistik GLOBAL dari seluruh data sebelum di-slice
+    // 2. Ambil data item dari file markdown spesifik milik user tersebut
+    // Note: Pastikan di dalam inventoryService, fungsi getInventoryFromMarkdown sudah lu sesuaikan untuk menerima parameter fileMeta atau userId/filePath
+    const items = await inventoryService.getInventoryFromMarkdown(fileMeta.id) || [];
+    
+    // 🔽 Hitung ringkasan statistik GLOBAL khusus untuk user yang sedang login
     const globalLowStock = items.filter(item => item.status === "Low Stock").length;
     
     // Total Nilai Aset Gudang (Nilai Satuan × Jumlah Stok)
     const globalTotalValue = items.reduce((acc, item) => {
-      // FIX BERHASIL: Mengubah fallback dari 100 ke 0 agar kalkulasi real-time sesuai data asli
       const value = Number(item.unit_value || 0); 
       const quantity = Number(item.qty || 0);
       return acc + (value * quantity);
     }, 0);
 
-    // Total Zona Unik yang terdaftar
+    // Total Zona Unik yang terdaftar milik user
     const globalTotalZones = new Set(
       items.filter(item => item.location).map(item => item.location.trim())
     ).size;
@@ -28,21 +34,21 @@ exports.getAllInventory = async (req, res) => {
     
     const paginatedItems = items.slice(offset, offset + limit);
 
-    // 🚀 Kirim data pagination berserta metrik globalnya ke Frontend
+    // 🚀 Kirim data pagination beserta metrik spesifik milik user ke Frontend
     res.status(200).json({
       success: true,
       data: paginatedItems,
       totalPages: Math.ceil(items.length / limit),
       currentPage: page,
       totalItems: items.length,
-      globalLowStock,      // <--- Ditambahkan untuk Summary Card Frontend
-      globalTotalValue,    // <--- SEKARANG SUDAH DINAMIS & AKURAT 🎉
-      globalTotalZones     // <--- Ditambahkan untuk Summary Card Frontend
+      globalLowStock,      
+      globalTotalValue,    
+      globalTotalZones     
     });
     
   } catch (error) {
-    console.error("Error di getAllInventory:", error);
-    res.status(500).json({ success: false, message: 'Gagal memuat data dari berkas Markdown' });
+    console.error("Error di getAllInventory (Multi-User):", error);
+    res.status(500).json({ success: false, message: 'Gagal memuat data dari berkas Markdown milik user' });
   }
 };
 
