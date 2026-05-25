@@ -1,190 +1,113 @@
-const db = require('../config/db');
+const inventoryService = require('../services/inventory/inventoryService');
 
-// =========================
-// GET ALL INVENTORY
-// =========================
+// Ambil semua daftar barang (Data dibaca langsung dari berkas .md via service)
 exports.getAllInventory = async (req, res) => {
   try {
-    const [rows] = await db.query(
-      'SELECT * FROM inventory ORDER BY id DESC'
-    );
+    const items = await inventoryService.getInventoryFromMarkdown() || [];
+    
+    // 🔽 LOGIKA BARU: Hitung ringkasan statistik GLOBAL dari seluruh data sebelum di-slice
+    const globalLowStock = items.filter(item => item.status === "Low Stock").length;
+    
+    // Total Nilai Aset Gudang (Nilai Satuan × Jumlah Stok)
+    const globalTotalValue = items.reduce((acc, item) => {
+      // FIX BERHASIL: Mengubah fallback dari 100 ke 0 agar kalkulasi real-time sesuai data asli
+      const value = Number(item.unit_value || 0); 
+      const quantity = Number(item.qty || 0);
+      return acc + (value * quantity);
+    }, 0);
 
-    res.status(200).json(rows);
+    // Total Zona Unik yang terdaftar
+    const globalTotalZones = new Set(
+      items.filter(item => item.location).map(item => item.location.trim())
+    ).size;
 
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      message: 'Gagal mengambil data inventory'
+    // Pagination buatan untuk memotong data array hasil parsing .md
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    
+    const paginatedItems = items.slice(offset, offset + limit);
+
+    // 🚀 Kirim data pagination berserta metrik globalnya ke Frontend
+    res.status(200).json({
+      success: true,
+      data: paginatedItems,
+      totalPages: Math.ceil(items.length / limit),
+      currentPage: page,
+      totalItems: items.length,
+      globalLowStock,      // <--- Ditambahkan untuk Summary Card Frontend
+      globalTotalValue,    // <--- SEKARANG SUDAH DINAMIS & AKURAT 🎉
+      globalTotalZones     // <--- Ditambahkan untuk Summary Card Frontend
     });
+    
+  } catch (error) {
+    console.error("Error di getAllInventory:", error);
+    res.status(500).json({ success: false, message: 'Gagal memuat data dari berkas Markdown' });
   }
 };
 
-
-// =========================
-// CREATE INVENTORY
-// =========================
+// Tambah item baru langsung ke berkas .md dan catat log auditnya
 exports.createInventory = async (req, res) => {
   try {
-    const {
-      item_code,
-      name,
-      category,
-      location,
-      stock,
-      unit_value,
-      description,
-      notes
-    } = req.body;
+    const fileMeta = await inventoryService.getMarkdownMetadata(req.user.id);
+    
+    // Eksekusi penulisan data dan pencatatan audit log ke tabel inventory_logs
+    await inventoryService.updateMarkdownItemLogic(fileMeta.id, null, req.body, 'ADD_ITEM');
 
-    const stockNum = Number(stock);
-
-    if (isNaN(stockNum)) {
-      return res.status(400).json({
-        message: 'Stock harus berupa angka'
-      });
-    }
-
-    // STATUS LOGIC FIXED
-    let status = 'In Stock';
-
-    if (stockNum <= 0) {
-      status = 'Out of Stock';
-    } else if (stockNum <= 5) {
-      status = 'Low Stock';
-    }
-
-    await db.query(
-      `INSERT INTO inventory (
-        item_code,
-        name,
-        category,
-        location,
-        stock,
-        status,
-        unit_value,
-        description,
-        notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        item_code,
-        name,
-        category,
-        location,
-        stockNum,
-        status,
-        unit_value,
-        description,
-        notes
-      ]
-    );
-
-    res.status(201).json({
-      message: 'Inventory berhasil ditambahkan'
-    });
-
+    res.status(201).json({ success: true, message: 'Item berhasil ditambahkan ke tata letak berkas' });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      message: 'Gagal menambahkan inventory'
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Gagal memproses penambahan item' });
   }
 };
 
-
-// =========================
-// DELETE INVENTORY
-// =========================
+// Hapus item dari tata letak ruang
 exports.deleteInventory = async (req, res) => {
   try {
-    const { id } = req.params;
+    const fileMeta = await inventoryService.getMarkdownMetadata(req.user.id);
+    
+    // Kirim instruksi hapus item ke service layer
+    await inventoryService.updateMarkdownItemLogic(fileMeta.id, { qty: 0 }, req.body, 'DELETE_ITEM');
 
-    await db.query(
-      'DELETE FROM inventory WHERE id=?',
-      [id]
-    );
-
-    res.status(200).json({
-      message: 'Inventory berhasil dihapus'
-    });
-
+    res.status(200).json({ success: true, message: 'Item berhasil dihapus dari sistem berkas' });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      message: 'Gagal menghapus inventory'
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Gagal menghapus item' });
   }
 };
 
-
-// =========================
-// UPDATE INVENTORY (FIXED)
-// =========================
+// Update properti atau posisi item
 exports.updateInventory = async (req, res) => {
   try {
-    const { id } = req.params;
+    const fileMeta = await inventoryService.getMarkdownMetadata(req.user.id);
+    
+    await inventoryService.updateMarkdownItemLogic(fileMeta.id, { qty: req.body.oldQty || 0 }, req.body, 'UPDATE_ITEM');
 
-    const {
-      item_code,
-      name,
-      category,
-      location,
-      stock,
-      unit_value,
-      description
-    } = req.body;
-
-    const stockNum = Number(stock);
-
-    if (isNaN(stockNum)) {
-      return res.status(400).json({
-        message: 'Stock harus berupa angka'
-      });
-    }
-
-    // STATUS AUTO RECALCULATE
-    let status = 'In Stock';
-
-    if (stockNum <= 0) {
-      status = 'Out of Stock';
-    } else if (stockNum <= 5) {
-      status = 'Low Stock';
-    }
-
-    await db.query(
-      `
-      UPDATE inventory
-      SET
-        item_code = ?,
-        name = ?,
-        category = ?,
-        location = ?,
-        stock = ?,
-        status = ?,
-        unit_value = ?,
-        description = ?
-      WHERE id = ?
-      `,
-      [
-        item_code,
-        name,
-        category,
-        location,
-        stockNum,
-        status,
-        unit_value,
-        description,
-        id
-      ]
-    );
-
-    res.json({
-      message: 'Inventory berhasil diupdate'
-    });
-
+    res.status(200).json({ success: true, message: 'Data item berhasil diperbarui' });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      message: 'Server Error'
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Gagal memperbarui data item' });
+  }
+};
+
+// Sinkronisasi massal dari canvas rendering frontend ke file .md utama
+exports.syncInventory = async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ success: false, message: 'Format data tidak valid' });
+    }
+
+    const fileMeta = await inventoryService.getMarkdownMetadata(req.user.id);
+
+    // Iterasi sync data layout canvas ke struktur penulisan log MySQL
+    for (const item of items) {
+      await inventoryService.updateMarkdownItemLogic(fileMeta.id, null, item, 'SYNC_LAYOUT');
+    }
+
+    res.status(200).json({ success: true, message: 'Sinkronisasi berkas layout berhasil dieksekusi' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Proses sinkronisasi massal gagal' });
   }
 };

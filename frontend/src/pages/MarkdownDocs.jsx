@@ -1,248 +1,219 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+// 🔽 1. IMPORT useNavigate dari react-router-dom
+import { useNavigate } from 'react-router-dom'; 
 import { 
-  FileText, Clock, HardDrive, Code, Plus, Upload, RefreshCw, 
-  Search, List, Grid, MoreVertical, X, Maximize, Edit3, ChevronLeft, ChevronRight
+  FileText, Clock, HardDrive, Code, RefreshCw, 
+  Maximize, Edit3, CheckCircle, AlertCircle
 } from 'lucide-react';
 
 export default function MarkdownDocs() {
-  // Data dummy sesuai desain
-  const files = [
-    { id: 1, name: 'main_warehouse.md', path: '/layouts/main_warehouse.md', modified: '2 hours ago', author: 'Rafi Maulana', lines: 156, active: true },
-    { id: 2, name: 'production_line.md', path: '/layouts/production_line.md', modified: '1 day ago', author: 'Rafi Maulana', lines: 89, active: false },
-    { id: 3, name: 'office_layout.md', path: '/layouts/office_layout.md', modified: '3 days ago', author: 'Rafi Maulana', lines: 67, active: false },
-    { id: 4, name: 'storage_facility.md', path: '/layouts/storage_facility.md', modified: '1 week ago', author: 'Rafi Maulana', lines: 134, active: false },
-    { id: 5, name: 'backup_warehouse_v2.md', path: '/backups/backup_warehouse_v2.md', modified: '2 weeks ago', author: 'Rafi Maulana', lines: 156, active: false },
-  ];
+  // 🔽 2. INISIALISASI NAVIGASI
+  const navigate = useNavigate(); 
 
-  const [activeFile, setActiveFile] = useState(files[0]);
+  const [rawMarkdown, setRawMarkdown] = useState('');
+  const [parsedData, setParsedData] = useState(null);
+  const [activeTab, setActiveTab] = useState('JSON-Runtime'); // disamakan dengan default tab di bawah
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchMarkdownData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('token'); 
+      const response = await axios.get('/api/markdown/layout', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        setRawMarkdown(response.data.rawMarkdown || '');
+        setParsedData(response.data.data || null);
+      }
+    } catch (err) {
+      console.error("Error fetching markdown:", err);
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        setError('Sesi lu habis atau lu ga punya akses (Unauthorized), bro.');
+      } else {
+        setError(err.response?.data?.message || 'Gagal membaca berkas Markdown utama dari server.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMarkdownData();
+  }, []);
+
+  const totalZones = parsedData?.zones?.length || parsedData?.layout?.zones?.length || 0;
+  const totalItems = parsedData?.items?.length || parsedData?.layout?.items?.length || 0;
+  const totalLines = rawMarkdown.split('\n').length;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full min-h-[400px] items-center justify-center bg-gray-50">
+        <div className="text-center space-y-2">
+          <RefreshCw className="animate-spin text-green-700 mx-auto" size={32} />
+          <p className="text-sm text-gray-500 font-medium">Memuat JSON Runtime dari berkas Markdown...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full min-h-[400px] items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white border border-red-200 rounded-xl p-6 max-w-md w-full text-center shadow-sm">
+          <AlertCircle className="text-red-500 mx-auto mb-3" size={40} />
+          <p className="text-red-600 font-semibold mb-2">Terjadi Kesalahan</p>
+          <p className="text-sm text-gray-500 mb-4">{error}</p>
+          <button onClick={fetchMarkdownData} className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 transition-colors">
+            Coba Lagi
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-gray-50/50 space-y-4">
+    <div className="flex flex-col h-full bg-gray-50/50 space-y-4 p-4 md:p-6 overflow-y-auto">
       
-      {/* 1. HEADER HALAMAN */}
-      <div className="flex justify-between items-start shrink-0">
+      {/* HEADER HALAMAN */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Markdown Files</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your layout files and version history</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-800">warehouse.md</h1>
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full flex items-center gap-1">
+              <CheckCircle size={12} /> Live Runtime
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">Sistem Manajemen Layout Inventory berbasis Markdown-First</p>
         </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 transition-colors">
-            <Plus size={16} /> New Markdown File
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-            <Upload size={16} /> Import
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-            <RefreshCw size={16} /> Refresh
-          </button>
-        </div>
+        <button onClick={fetchMarkdownData} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm">
+          <RefreshCw size={16} /> Sync Server
+        </button>
       </div>
 
-      {/* 2. STATS CARDS */}
-      <div className="grid grid-cols-4 gap-4 shrink-0">
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
+      {/* STATS CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-green-50 text-green-600 rounded-lg"><FileText size={24} /></div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Files</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-gray-800">12</span>
-              <span className="text-xs text-gray-500">3 active layouts</span>
-            </div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">File Target</p>
+            <span className="text-lg font-bold text-gray-800">warehouse.md</span>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Clock size={24} /></div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Modified</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold text-gray-800">2 hours ago</span>
-            </div>
-            <p className="text-xs text-gray-500 truncate w-32">main_warehouse.md</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Zones Detected</p>
+            <span className="text-2xl font-bold text-gray-800">{totalZones} <span className="text-xs font-normal text-gray-400">grup</span></span>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-purple-50 text-purple-600 rounded-lg"><HardDrive size={24} /></div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Storage Used</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold text-gray-800">24.8 MB</span>
-              <span className="text-xs text-gray-500">of 1 GB</span>
-            </div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Items Tracked</p>
+            <span className="text-2xl font-bold text-gray-800">{totalItems} <span className="text-xs font-normal text-gray-400">units</span></span>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-orange-50 text-orange-600 rounded-lg"><Code size={24} /></div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Lines</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-gray-800">1,247</span>
-            </div>
-            <p className="text-xs text-gray-500">across all files</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Document Length</p>
+            <span className="text-2xl font-bold text-gray-800">{totalLines} <span className="text-xs font-normal text-gray-400">lines</span></span>
           </div>
         </div>
       </div>
 
-      {/* 3. AREA KONTEN BAWAH (Split: List & Preview) */}
-      <div className="flex flex-1 gap-6 overflow-hidden">
+      {/* CORE INTERFACE AREA */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* KIRI: Daftar File */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Toolbar Pencarian & Filter */}
-          <div className="flex justify-between items-center mb-4 shrink-0 gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input 
-                type="text" 
-                placeholder="Search markdown files..." 
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-white outline-none">
-                <option>All Status</option>
-              </select>
-              <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-white outline-none">
-                <option>Sort by: Recent</option>
-              </select>
-              <div className="flex bg-gray-100 border border-gray-200 rounded-lg overflow-hidden ml-2">
-                <button className="p-2 bg-white text-green-700 shadow-sm"><List size={18} /></button>
-                <button className="p-2 text-gray-500 hover:text-gray-700"><Grid size={18} /></button>
-              </div>
-            </div>
+        {/* PANEL KIRI: Raw Teks Editor Box */}
+        <div className="lg:col-span-7 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden h-[500px]">
+          <div className="p-4 border-b border-gray-100 bg-gray-50/70 flex justify-between items-center">
+            <span className="text-sm font-bold text-gray-700 flex items-center gap-2">
+              <Code size={16} className="text-green-700" /> Source File Code Content
+            </span>
           </div>
+          <div className="flex-1 font-mono text-xs bg-slate-900 text-slate-100 p-4 overflow-auto leading-5 select-text">
+            <pre className="whitespace-pre-wrap">{rawMarkdown || "# File Kosong"}</pre>
+          </div>
+        </div>
 
-          {/* List File */}
-          <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-            {files.map((file) => {
-              const isActive = activeFile.id === file.id;
-              return (
-                <div 
-                  key={file.id} 
-                  onClick={() => setActiveFile(file)}
-                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                    isActive ? 'border-green-500 bg-green-50/30 shadow-sm' : 'border-gray-200 bg-white hover:border-green-300'
+        {/* PANEL KANAN: Live Parse Analyzer Preview */}
+        <div className="lg:col-span-5 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden h-[500px]">
+          <div className="border-b border-gray-100 px-4 flex justify-between items-center bg-gray-50/70 shrink-0">
+            <div className="flex">
+              {['JSON-Runtime', 'Raw-Debug'].map((tab) => (
+                <button 
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-3 text-sm font-semibold transition-all ${
+                    activeTab === tab 
+                      ? 'text-green-700 border-b-2 border-green-600 bg-white' 
+                      : 'text-gray-400 hover:text-gray-600'
                   }`}
                 >
-                  <div className="flex items-start gap-4">
-                    <div className={`p-2 rounded-lg border ${isActive ? 'bg-green-100 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-green-600'}`}>
-                      <span className="text-xs font-extrabold">MD</span>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className={`font-semibold ${isActive ? 'text-green-800' : 'text-gray-800'}`}>{file.name}</h3>
-                        {file.active && <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">Active</span>}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-0.5">{file.path}</p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span className="flex items-center gap-1"><Clock size={12} /> Modified {file.modified}</span>
-                        <span className="flex items-center gap-1">
-                          <div className="w-4 h-4 rounded-full bg-green-800 text-white flex items-center justify-center text-[8px] font-bold">RM</div>
-                          {file.author}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs font-medium text-gray-400 px-3 py-1 bg-gray-50 rounded-md border border-gray-100">{file.lines} lines</span>
-                    <button className="text-gray-400 hover:text-gray-700"><MoreVertical size={18} /></button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Pagination */}
-          <div className="flex justify-between items-center py-4 text-sm text-gray-500 shrink-0">
-            <span>Showing 5 of 12 files</span>
-            <div className="flex gap-1">
-              <button className="p-1 hover:bg-gray-200 rounded"><ChevronLeft size={16} /></button>
-              <button className="px-2.5 py-1 bg-green-700 text-white rounded font-medium">1</button>
-              <button className="px-2.5 py-1 hover:bg-gray-200 rounded">2</button>
-              <button className="px-2.5 py-1 hover:bg-gray-200 rounded">3</button>
-              <button className="p-1 hover:bg-gray-200 rounded"><ChevronRight size={16} /></button>
-            </div>
-          </div>
-        </div>
-
-        {/* KANAN: Panel Detail/Preview */}
-        <div className="w-[420px] bg-white border border-gray-200 rounded-xl flex flex-col shadow-sm shrink-0">
-          {/* Panel Header */}
-          <div className="p-4 border-b border-gray-100 flex justify-between items-start">
-            <div className="flex items-center gap-3">
-              <div className="p-1.5 bg-green-50 border border-green-100 text-green-600 rounded">
-                <span className="text-[10px] font-extrabold">MD</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-gray-800 truncate max-w-[180px]">{activeFile.name}</h2>
-                  {activeFile.active && <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">Active</span>}
-                </div>
-              </div>
-            </div>
-            <button className="text-gray-400 hover:text-gray-700"><X size={20} /></button>
-          </div>
-
-          {/* Panel Tabs */}
-          <div className="flex border-b border-gray-100 px-4">
-            <button className="px-4 py-3 text-sm font-semibold text-green-700 border-b-2 border-green-600">Preview</button>
-            <button className="px-4 py-3 text-sm font-medium text-gray-500 hover:text-gray-700">Info</button>
-            <button className="px-4 py-3 text-sm font-medium text-gray-500 hover:text-gray-700">History</button>
-          </div>
-
-          {/* Panel Quick Stats */}
-          <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100">
-            <div className="p-4 text-center">
-              <p className="text-xl font-bold text-gray-800">3</p>
-              <p className="text-xs text-gray-500 mt-1">Zones</p>
-            </div>
-            <div className="p-4 text-center">
-              <p className="text-xl font-bold text-gray-800">65</p>
-              <p className="text-xs text-gray-500 mt-1">Items</p>
-            </div>
-            <div className="p-4 text-center">
-              <p className="text-xl font-bold text-gray-800">196.00 m²</p>
-              <p className="text-xs text-gray-500 mt-1">Total Area</p>
-            </div>
-          </div>
-
-          {/* Panel Code Preview */}
-          <div className="flex-1 flex overflow-auto font-mono text-xs">
-            <div className="bg-gray-50 text-gray-400 px-3 py-4 text-right select-none border-r border-gray-100">
-              {Array.from({ length: 25 }).map((_, i) => (
-                <div key={i} className="leading-5">{i + 1}</div>
+                  {tab}
+                </button>
               ))}
             </div>
-            <pre className="p-4 text-gray-800 w-full overflow-auto whitespace-pre-wrap leading-5">
-              <span className="text-green-700 font-bold"># Main Warehouse</span>{'\n'}
-              <span className="text-blue-600">Scale:</span> 1:100{'\n'}
-              <span className="text-blue-600">Unit:</span> meters{'\n\n'}
-              <span className="text-green-600 font-bold">## Zones</span>{'\n\n'}
-              <span className="text-green-500 font-bold">### Production Area</span>{'\n'}
-              <span className="text-red-500">id:</span> production{'\n'}
-              <span className="text-red-500">points:</span> [[0,0], [12,0], [12,8], [0,8]]{'\n'}
-              <span className="text-red-500">color:</span> <span className="text-purple-600">#EFEFEF</span>{'\n'}
-              <span className="text-red-500">items:</span>{'\n'}
-              {'  '}<span className="text-gray-500">-</span> <span className="text-blue-500">id:</span> cnc_01{'\n'}
-              {'    '}<span className="text-blue-500">name:</span> "CNC Machine 01"{'\n'}
-              {'    '}<span className="text-blue-500">pos:</span> [2,2]{'\n'}
-              {'    '}<span className="text-blue-500">icon:</span> machine{'\n'}
-            </pre>
           </div>
 
-          {/* Panel Footer Actions */}
-          <div className="p-4 border-t border-gray-100 flex gap-2 bg-gray-50 rounded-b-xl">
-            <button className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 transition-colors">
-              <Maximize size={16} /> Open in 2D Editor
+          <div className="flex-1 overflow-auto p-4 bg-gray-50/30">
+            {activeTab === 'JSON-Runtime' ? (
+              <div className="space-y-4">
+                <div className="bg-green-50/50 p-3 rounded-lg border border-green-100/70 text-xs text-green-800">
+                  💡 <strong>Info Mesin:</strong> Data di bawah ini dirender dinamis dari hasil konversi <code>markdownParser.js</code> backend.
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold text-gray-700">Metadata Gudang</h3>
+                  <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-2xs space-y-1 text-xs">
+                    <p><span className="text-gray-400">File Name:</span> {parsedData?.name || 'warehouse.md'}</p>
+                    <p><span className="text-gray-400">Parsing Status:</span> Success</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold text-gray-700">Daftar Zona Terdeteksi</h3>
+                  <div className="max-h-[180px] overflow-y-auto space-y-1.5 pr-1">
+                    {(parsedData?.zones || parsedData?.layout?.zones || []).map((zone, idx) => (
+                      <div key={idx} className="bg-white px-3 py-2 rounded-md border border-gray-200/60 text-xs flex justify-between items-center">
+                        <span className="font-semibold text-gray-700">{zone.name || zone.id || `Zone ${idx + 1}`}</span>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px]">{zone.area || '0'} sqm</span>
+                      </div>
+                    ))}
+                    {!(parsedData?.zones || parsedData?.layout?.zones) && (
+                      <p className="text-xs text-gray-400 italic">Tidak ada data zona.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="font-mono text-[11px] bg-gray-900 text-green-400 p-4 rounded-xl overflow-auto h-full shadow-inner">
+                <pre>{JSON.stringify(parsedData, null, 2)}</pre>
+              </div>
+            )}
+          </div>
+
+          {/* Panel Footer Action Buttons */}
+          <div className="p-4 border-t border-gray-100 flex gap-2 bg-gray-50 shrink-0">
+            {/* 🔽 3. PASANG onClick KE JALUR ROUTE UTAMA LAYOUT 2D KAMU */}
+            <button 
+              onClick={() => navigate('/2d-layout')} 
+              className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 transition-colors shadow-sm"
+            >
+              <Maximize size={16} /> <span>Open in 2D Editor</span>
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-              <Edit3 size={16} /> Edit File
-            </button>
-            <button className="px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              <MoreVertical size={16} />
+            <button className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+              <Edit3 size={16} /> <span>Edit File</span>
             </button>
           </div>
+
         </div>
-
       </div>
     </div>
   );
