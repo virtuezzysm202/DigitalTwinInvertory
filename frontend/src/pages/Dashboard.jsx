@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
   Box, Map, Package, Activity, Bell, HelpCircle, 
@@ -13,7 +13,6 @@ export default function Dashboard() {
   const [fileSelected, setFileSelected] = useState(null);
   const [loading, setLoading] = useState(false);
   
-  // State Data Riil Backend
   const [recentLayouts, setRecentLayouts] = useState([]);
   const [stats, setStats] = useState({
     totalItems: 0,
@@ -23,64 +22,76 @@ export default function Dashboard() {
   });
   const [fetchLoading, setFetchLoading] = useState(true);
 
-// --- FETCH DATA DASHBOARD & STATISTIK (SUPER STABLE VERSION) ---
-  const fetchDashboardData = async () => {
+  // --- AMBIL DATA INVENTORY (DENGAN ANTI-CACHE) ---
+  const fetchInventoryData = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
     try {
-      setFetchLoading(true);
-      const token = localStorage.getItem('token');
-      const headers = { Authorization: `Bearer ${token}` };
+      // FIX: Tambahkan parameter t=${Date.now()} untuk mematikan cache browser (Bypass Cache)
+      const response = await axios.get(`http://localhost:5000/api/inventory?limit=1&t=${Date.now()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }); 
       
-      // 1. Tembak ke endpoint inventory
-      const statsRes = await axios.get('http://localhost:5000/api/inventory?limit=1', { headers }); 
+      if (response.data && response.data.success) {
+        const resData = response.data;
+        const totalItemsVal = Number(resData.totalItems ?? 0);
+        const totalZonesVal = Number(resData.globalTotalZones ?? 0);
+        const lowStockVal = Number(resData.globalLowStock ?? 0);
 
-      // KUNCI DEBUG: Intip struktur JSON asli dari backend di Console Browser (F12)
-      console.log("ISI RESPONS BACKEND INVENTORY:", statsRes.data);
+        console.log("LOG DASHBOARD - Data Baru Masuk UI:", { totalItemsVal, totalZonesVal, lowStockVal });
 
-      if (statsRes.data && statsRes.data.success) {
-        const resData = statsRes.data;
-
-        // 2. Pemetaan Pintar (Mendukung format mentah maupun format ber-objek)
         setStats({
-          // Cek resData.totalItems atau resData.data.totalItems
-          totalItems: resData.totalItems ?? resData.data?.totalItems ?? 0,
-          
-          // Cek semua kemungkinan penamaan Global Total Zones
-          totalZones: resData.globalTotalZones ?? resData.totalZones ?? resData.data?.globalTotalZones ?? resData.data?.totalZones ?? 0,
-          
-          // Cek semua kemungkinan penamaan Low Stock
-          lowStock: resData.globalLowStock ?? resData.lowStock ?? resData.data?.globalLowStock ?? resData.data?.lowStock ?? 0,
-          
-          utilization: (resData.totalItems ?? resData.data?.totalItems ?? 0) > 0 ? 45.5 : 0
+          totalItems: totalItemsVal,
+          totalZones: totalZonesVal,
+          lowStock: lowStockVal,
+          utilization: totalItemsVal > 0 ? 45.5 : 0
         });
       }
-
-      // 3. Ambil data layout untuk workspace aktif
-      const projectRes = await axios.get('http://localhost:5000/api/markdown/layout', { headers });
-
-      if (projectRes.data && projectRes.data.success) {
-        setRecentLayouts([
-          {
-            id: projectRes.data.projectId,
-            name: projectRes.data.data?.room?.name || "Gudang Utama",
-            description: "Active Layout Workspace",
-            updated_at: new Date().toISOString()
-          }
-        ]);
-      }
-
-    } catch (error) {
-      console.error("Gagal mengambil data dashboard:", error);
-      setStats({ totalItems: 0, totalZones: 0, lowStock: 0, utilization: 0 });
+    } catch (err) {
+      console.error("Gagal memuat inventory di dashboard:", err);
     } finally {
       setFetchLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
   }, []);
 
-  // --- HANDLER SUBMIT MODAL (HYBRID NEW LAYOUT) ---
+  // --- AMBIL DATA LAYOUT (DENGAN ANTI-CACHE) ---
+  const fetchLayoutData = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      // FIX: Tambahkan parameter t=${Date.now()} agar backend memberikan metadata file terbaru
+      const response = await axios.get(`http://localhost:5000/api/markdown/layout?t=${Date.now()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data && response.data.success) {
+        // Ambil data nama ruangan atau nama proyek secara dinamis dari respons berkas aktif
+        const layoutName = response.data.data?.room?.name || response.data.projectName || "Gudang Utama (Aktif)";
+        const layoutDesc = response.data.data?.room?.description || description || "Active Layout Workspace";
+        
+        setRecentLayouts([
+          {
+            id: response.data.projectId || 'active-project',
+            name: layoutName,
+            description: layoutDesc,
+            updated_at: response.data.updatedAt || new Date().toISOString()
+          }
+        ]);
+      }
+    } catch (err) {
+      console.log("Layout 304 / Menggunakan file fallback default.");
+    }
+  }, [description]);
+
+  // Eksekusi Independent Lifecycle
+  useEffect(() => {
+    fetchInventoryData();
+    fetchLayoutData();
+  }, [fetchInventoryData, fetchLayoutData]);
+
+  // --- HANDLER SUBMIT MODAL ---
   const handleCreateLayout = async (e) => {
     e.preventDefault();
     if (!name.trim()) return alert('Nama gudang wajib diisi!');
@@ -88,14 +99,12 @@ export default function Dashboard() {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      if (!token) return alert('Sesi habis, silakan login kembali.');
       
       const formData = new FormData();
       formData.append('name', name);
       formData.append('description', description);
-      
-      if (fileSelected) {
-        formData.append('markdownFile', fileSelected);
-      }
+      if (fileSelected) formData.append('markdownFile', fileSelected);
 
       const response = await axios.post(
         'http://localhost:5000/api/markdown/create-project',
@@ -109,15 +118,17 @@ export default function Dashboard() {
       );
 
       if (response.data.success) {
-        alert(response.data.message);
+        alert(response.data.message || 'Layout berhasil dibuat!');
         setIsOpen(false);
         setName('');
         setDescription('');
         setFileSelected(null);
-        fetchDashboardData(); // Refresh data halaman utama
+        
+        // Paksa refresh data setelah file markdown baru sukses diupload
+        fetchInventoryData();
+        fetchLayoutData();
       }
     } catch (error) {
-      console.error(error);
       alert(error.response?.data?.message || 'Gagal membuat layout baru.');
     } finally {
       setLoading(false);
@@ -127,7 +138,7 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-gray-50/50 p-4 sm:p-6 space-y-6">
       
-      {/* 1. HEADER DASHBOARD */}
+      {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start gap-4 sm:gap-0">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Dashboard</h1>
@@ -151,14 +162,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 2. STATS CARDS */}
+      {/* STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Items */}
         <div className="bg-green-50/50 p-4 sm:p-5 rounded-2xl border border-green-100 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-green-100 text-green-700 rounded-xl"><Box size={22} /></div>
           <div>
             <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Total Items</p>
-            <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-0.5">{stats.totalItems.toLocaleString()} Items</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-0.5">{(stats.totalItems).toLocaleString()} Items</h3>
             <p className="text-[10px] sm:text-xs text-green-600 font-medium">Live sync data</p>
           </div>
         </div>
@@ -194,7 +205,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 3. BOTTOM SECTION: RECENT LAYOUTS */}
+      {/* RECENT LAYOUTS */}
       <div className="w-full">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 flex flex-col min-h-[400px]">
           <div className="flex justify-between items-center mb-4 sm:mb-6">
@@ -236,7 +247,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* --- FLOATING MODAL INTERFACE --- */}
+      {/* FLOATING MODAL */}
       {isOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm sm:max-w-md shadow-xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
