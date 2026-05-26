@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-// 🔽 1. IMPORT useNavigate dari react-router-dom
+// 🔽 IMPORT useNavigate dari react-router-dom
 import { useNavigate } from 'react-router-dom'; 
 import { 
   FileText, Clock, HardDrive, Code, RefreshCw, 
@@ -8,12 +8,12 @@ import {
 } from 'lucide-react';
 
 export default function MarkdownDocs() {
-  // 🔽 2. INISIALISASI NAVIGASI
+  // 🔽 INISIALISASI NAVIGASI
   const navigate = useNavigate(); 
 
   const [rawMarkdown, setRawMarkdown] = useState('');
   const [parsedData, setParsedData] = useState(null);
-  const [activeTab, setActiveTab] = useState('JSON-Runtime'); // disamakan dengan default tab di bawah
+  const [activeTab, setActiveTab] = useState('JSON-Runtime'); 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -46,9 +46,17 @@ export default function MarkdownDocs() {
     fetchMarkdownData();
   }, []);
 
-  const totalZones = parsedData?.zones?.length || parsedData?.layout?.zones?.length || 0;
-  const totalItems = parsedData?.items?.length || parsedData?.layout?.items?.length || 0;
-  const totalLines = rawMarkdown.split('\n').length;
+  // ====================================================================
+  // 🟢 KUNCI PERBAIKAN: AKUMULASI TOTAL ITEMS SECARA NESTED DARI ZONES
+  // ====================================================================
+  const totalZones = parsedData?.zones?.length || 0;
+  
+  const totalItems = parsedData?.zones?.reduce((sum, zone) => {
+    return sum + (zone.items?.length || 0);
+  }, 0) || 0;
+
+  const totalLines = rawMarkdown ? rawMarkdown.split('\n').length : 0;
+  // ====================================================================
 
   if (isLoading) {
     return (
@@ -180,13 +188,13 @@ export default function MarkdownDocs() {
                 <div className="space-y-2">
                   <h3 className="text-sm font-bold text-gray-700">Daftar Zona Terdeteksi</h3>
                   <div className="max-h-[180px] overflow-y-auto space-y-1.5 pr-1">
-                    {(parsedData?.zones || parsedData?.layout?.zones || []).map((zone, idx) => (
+                    {(parsedData?.zones || []).map((zone, idx) => (
                       <div key={idx} className="bg-white px-3 py-2 rounded-md border border-gray-200/60 text-xs flex justify-between items-center">
                         <span className="font-semibold text-gray-700">{zone.name || zone.id || `Zone ${idx + 1}`}</span>
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px]">{zone.area || '0'} sqm</span>
                       </div>
                     ))}
-                    {!(parsedData?.zones || parsedData?.layout?.zones) && (
+                    {(!parsedData?.zones || parsedData?.zones.length === 0) && (
                       <p className="text-xs text-gray-400 italic">Tidak ada data zona.</p>
                     )}
                   </div>
@@ -201,7 +209,6 @@ export default function MarkdownDocs() {
 
           {/* Panel Footer Action Buttons */}
           <div className="p-4 border-t border-gray-100 flex gap-2 bg-gray-50 shrink-0">
-            {/* 🔽 3. PASANG onClick KE JALUR ROUTE UTAMA LAYOUT 2D KAMU */}
             <button 
               onClick={() => navigate('/2d-layout')} 
               className="flex-1 flex justify-center items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 transition-colors shadow-sm"

@@ -3,16 +3,15 @@ const inventoryService = require('../services/inventory/inventoryService');
 // Ambil semua daftar barang (Data dibaca spesifik per user via service)
 exports.getAllInventory = async (req, res) => {
   try {
-    const userId = req.user.id; // ⬅️ FIX: Ambil ID user dari JWT Token
+    const userId = req.user.id; // Ambil ID user dari JWT Token
 
     // 1. Ambil metadata file markdown milik user ini
     const fileMeta = await inventoryService.getMarkdownMetadata(userId);
     
     // 2. Ambil data item dari file markdown spesifik milik user tersebut
-    // Note: Pastikan di dalam inventoryService, fungsi getInventoryFromMarkdown sudah lu sesuaikan untuk menerima parameter fileMeta atau userId/filePath
     const items = await inventoryService.getInventoryFromMarkdown(fileMeta.id) || [];
     
-    // 🔽 Hitung ringkasan statistik GLOBAL khusus untuk user yang sedang login
+    // Hitung ringkasan statistik GLOBAL khusus untuk user yang sedang login
     const globalLowStock = items.filter(item => item.status === "Low Stock").length;
     
     // Total Nilai Aset Gudang (Nilai Satuan × Jumlah Stok)
@@ -27,14 +26,14 @@ exports.getAllInventory = async (req, res) => {
       items.filter(item => item.location).map(item => item.location.trim())
     ).size;
 
-    // Pagination buatan untuk memotong data array hasil parsing .md
+    // Pagination data array hasil parsing .md
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     
     const paginatedItems = items.slice(offset, offset + limit);
 
-    // 🚀 Kirim data pagination beserta metrik spesifik milik user ke Frontend
+    // Kirim data pagination beserta metrik spesifik milik user ke Frontend
     res.status(200).json({
       success: true,
       data: paginatedItems,
@@ -43,7 +42,7 @@ exports.getAllInventory = async (req, res) => {
       totalItems: items.length,
       globalLowStock,      
       globalTotalValue,    
-      globalTotalZones     
+      globalTotalZones: globalTotalZones || 1 
     });
     
   } catch (error) {
@@ -99,16 +98,18 @@ exports.updateInventory = async (req, res) => {
 // Sinkronisasi massal dari canvas rendering frontend ke file .md utama
 exports.syncInventory = async (req, res) => {
   try {
-    const { items } = req.body;
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).json({ success: false, message: 'Format data tidak valid' });
-    }
-
+    const { items, markdown } = req.body; 
+    
     const fileMeta = await inventoryService.getMarkdownMetadata(req.user.id);
 
-    // Iterasi sync data layout canvas ke struktur penulisan log MySQL
-    for (const item of items) {
-      await inventoryService.updateMarkdownItemLogic(fileMeta.id, null, item, 'SYNC_LAYOUT');
+    if (markdown) {
+      await inventoryService.writeRawMarkdown(fileMeta.id, markdown);
+    } else if (items && Array.isArray(items)) {
+      for (const item of items) {
+        await inventoryService.updateMarkdownItemLogic(fileMeta.id, null, item, 'SYNC_LAYOUT');
+      }
+    } else {
+      return res.status(400).json({ success: false, message: 'Format data transaksi sync tidak valid' });
     }
 
     res.status(200).json({ success: true, message: 'Sinkronisasi berkas layout berhasil dieksekusi' });

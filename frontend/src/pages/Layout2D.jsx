@@ -8,6 +8,8 @@ export default function Layout2D() {
   const [markdownCode, setMarkdownCode] = useState('');
   const [activeTab, setActiveTab] = useState('preview');
   const [zones, setZones] = useState([]);
+  const [projectId, setProjectId] = useState(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true); 
 
   const [scale, setScale] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
@@ -24,16 +26,17 @@ export default function Layout2D() {
     };
   };
 
+  // 1. Jalankan fetch pertama kali saat komponen mounting
   useEffect(() => {
     fetchActiveLayout();
   }, []);
 
-  // Live-preview otomatis dipicu saat isi textarea berubah
+  // 2. Live-preview otomatis HANYA dipicu setelah initial load selesai dilakukan
   useEffect(() => {
-    if (markdownCode) {
+    if (!isInitialLoad && markdownCode) {
       parseMarkdownData(markdownCode);
     }
-  }, [markdownCode]);
+  }, [markdownCode, isInitialLoad]);
 
   // Handle responsive auto-resize canvas stage
   useEffect(() => {
@@ -61,6 +64,10 @@ export default function Layout2D() {
       const response = await axios.get('http://localhost:5000/api/markdown/layout', getAuthHeader());
       
       if (response.data) {
+        if (response.data.projectId) {
+          setProjectId(response.data.projectId);
+        }
+
         if (response.data.rawMarkdown) {
           setMarkdownCode(response.data.rawMarkdown);
         }
@@ -70,24 +77,27 @@ export default function Layout2D() {
           const formattedZones = transformBackendZones(runtimeData.zones);
           setZones(formattedZones);
         }
+        
+        // Matikan flag initial load setelah data resmi dari backend masuk ke state
+        setIsInitialLoad(false);
       }
     } catch (error) {
       console.error("Gagal mengambil data JSON runtime layout:", error);
+      setIsInitialLoad(false);
     }
   };
 
-  // Helper standarisasi koordinat lokal Konva Line [x1, y1, x2, y2...]
   const transformBackendZones = (backendZones) => {
     return backendZones.map((zone, idx) => {
-      const zX = zone.x || 0;
-      const zY = zone.y || 0;
-      const zW = zone.width || 100;
-      const zH = zone.height || 100;
+      const zX = Number(zone.x) || 0;
+      const zY = Number(zone.y) || 0;
+      const zW = Number(zone.width) || 100;
+      const zH = Number(zone.height) || 100;
 
       return {
         id: zone.id || `zone_${idx}`,
         name: zone.name || 'Unnamed Zone',
-        points: [0, 0, zW, 0, zW, zH, 0, zH], // Diubah ke lokal 0,0 terhadap Group koordinat X & Y
+        points: [0, 0, zW, 0, zW, zH, 0, zH],
         color: zone.color || '#D1FAF5',
         items: zone.items || [],
         x: zX,
@@ -97,7 +107,7 @@ export default function Layout2D() {
   };
 
   // ==========================================
-  // LIVE TEXT-EDITOR PARSER (PERBAIKAN LOGIKA)
+  // LIVE TEXT-EDITOR PARSER (SUDAH DIPERBAIKI 🚀)
   // ==========================================
   const parseMarkdownData = (text) => {
     if (!text) return;
@@ -111,51 +121,55 @@ export default function Layout2D() {
         if (!trimmedLine) return;
 
         // Mendeteksi baris Zone baru
-        if (trimmedLine.startsWith('## ') && trimmedLine.includes('[Zone]')) {
+        if (trimmedLine.startsWith('## ') && /\[Zone\]/i.test(trimmedLine)) {
           if (currentZone) {
             tempZones.push(currentZone);
           }
 
-          const zoneNameMatch = trimmedLine.match(/\[Zone\]\s*([^(]+)/);
-          const widthMatch = trimmedLine.match(/W:\s*(\d+)/i);
-          const heightMatch = trimmedLine.match(/H:\s*(\d+)/i);
-          const xMatch = trimmedLine.match(/X:\s*(\d+)/i);
-          const yMatch = trimmedLine.match(/Y:\s*(\d+)/i);
+          const zoneNameMatch = trimmedLine.match(/\[Zone\]\s*([^(#\n|]+)/i);
+          const widthMatch = trimmedLine.match(/W\s*:\s*(\d+)/i);
+          const heightMatch = trimmedLine.match(/H\s*:\s*(\d+)/i);
+          const xMatch = trimmedLine.match(/X\s*:\s*(\d+)/i);
+          const yMatch = trimmedLine.match(/Y\s*:\s*(\d+)/i);
 
-          const zX = xMatch ? parseInt(xMatch[1]) : 0;
-          const zY = yMatch ? parseInt(yMatch[1]) : 0;
-          const zW = widthMatch ? parseInt(widthMatch[1]) : 100;
-          const zH = heightMatch ? parseInt(heightMatch[1]) : 100;
+          const zX = xMatch ? parseInt(xMatch[1], 10) : 0;
+          const zY = yMatch ? parseInt(yMatch[1], 10) : 0;
+          const zW = widthMatch ? parseInt(widthMatch[1], 10) : 100;
+          const zH = heightMatch ? parseInt(heightMatch[1], 10) : 100;
 
           currentZone = {
             id: `zone_${tempZones.length}`,
             name: zoneNameMatch ? zoneNameMatch[1].trim() : "Unknown Zone",
-            points: [0, 0, zW, 0, zW, zH, 0, zH], // Gunakan koordinat lokal grup
+            points: [0, 0, zW, 0, zW, zH, 0, zH],
             color: '#D1FAF5',
             items: [],
             x: zX,
             y: zY
           };
         }
-        // Mendeteksi baris Item di dalam Zone aktif
+        
+        // Mendeteksi baris Item dan memisahkan Kode | Nama (FIXED)
         else if (trimmedLine.startsWith('-') && currentZone) {
           const cleanLine = trimmedLine.substring(1).trim();
           const parts = cleanLine.split('|').map(p => p.trim());
 
           if (parts.length > 0 && parts[0] !== "") {
-            const itemName = parts[0];
-            let pos = [20, 40]; // default offset inside zone
+            const itemCode = parts[0]; // Contoh: "GDT-001"
+            // Jika ada parameter nama di kolom kedua, pakai nama tersebut. Jika tidak, samakan dengan kode.
+            const itemName = parts[1] && !parts[1].toLowerCase().startsWith('qty:') ? parts[1] : parts[0]; 
+
+            let pos = [20, 40]; 
 
             parts.forEach(part => {
               if (part.toLowerCase().startsWith('pos:')) {
-                const coords = part.replace(/pos:\s*/i, '').split(',').map(c => parseInt(c.trim()));
-                if (coords.length === 2) pos = coords;
+                const coords = part.replace(/pos:\s*/i, '').split(',').map(c => parseInt(c.trim(), 10));
+                if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) pos = coords;
               }
             });
 
             currentZone.items.push({
-              id: `item_${currentZone.items.length}`,
-              name: itemName,
+              id: itemCode, // Jadikan kode unik (GDT-001) sebagai ID untuk relasi DB
+              name: itemName, // Menyimpan nama aslinya (iPhone 15 Pro Max)
               pos: pos
             });
           }
@@ -208,14 +222,20 @@ export default function Layout2D() {
   };
 
   // ==========================================
-  // SAVE CHANGES KE ENDPOINT API BACKEND BARU
+  // HANDLER SAVE CHANGES (SUDAH DIPERBAIKI 🚀)
   // ==========================================
   const handleSaveChanges = async () => {
     try {
+      if (!projectId) {
+        alert("Waduh, ID Proyek belum termuat sempurna. Coba refresh halaman, bro.");
+        return;
+      }
+
+      // Mengekstrak struktur objek item secara lengkap agar lolos filter backend & inventory database
       const extractedItems = zones.flatMap(zone => 
         (zone.items || []).map(item => ({
-          item_id: item.id, 
-          name: item.name,
+          item_id: item.id, // Kode unik, misal: GDT-001
+          name: item.name,  // Nama barang, misal: iPhone 15 Pro Max
           zone: zone.name,
           location_x: item.pos[0],
           location_y: item.pos[1]
@@ -224,13 +244,14 @@ export default function Layout2D() {
 
       await axios.post(`http://localhost:5000/api/markdown/save`, { 
         markdown: markdownCode,
+        projectId: projectId, 
         items: extractedItems
       }, getAuthHeader());
 
-      alert('Layout berhasil disimpan & Sinkronisasi file warehouse.md sukses! 🚀');
+      alert('Layout berhasil disimpan & Sinkronisasi file sukses! 🚀');
     } catch (error) {
       console.error("Detail Error Simpan:", error);
-      alert('Gagal menyimpan perubahan. Pastikan rute backend POST /api/markdown/save sudah aktif.');
+      alert('Gagal menyimpan perubahan. Cek kembali koneksi backend.');
     }
   };
 
@@ -327,7 +348,7 @@ export default function Layout2D() {
 
                   {/* Render Setiap Zona */}
                   {zones.map((zone, idx) => (
-                    <Group key={zone.id || idx} x={zone.x || 0} y={zone.y || 0}>
+                    <Group key={zone.id || idx} x={Number(zone.x) || 0} y={Number(zone.y) || 0}>
                       {/* Bidang Kotak Zona */}
                       <Line points={zone.points} fill={zone.color} stroke="#64748b" strokeWidth={1.5} closed />
                       
@@ -345,8 +366,8 @@ export default function Layout2D() {
                       {zone.items && zone.items.map((item, itemIdx) => (
                         <Group 
                           key={item.id || itemIdx} 
-                          x={item.pos ? item.pos[0] : 0} 
-                          y={item.pos ? item.pos[1] : 0}
+                          x={item.pos ? Number(item.pos[0]) : 0} 
+                          y={item.pos ? Number(item.pos[1]) : 0}
                         >
                           <Circle radius={5} fill="#ffffff" stroke="#0f172a" strokeWidth={1.5} />
                           <Circle radius={1.5} fill="#ef4444" />
