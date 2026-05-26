@@ -99,8 +99,9 @@ exports.getZonesFromMarkdown = async (fileId) => {
 /**
  * AMBIL SEMUA DATA INVENTORY DARI FILE MARKDOWN
  */
-exports.getInventoryFromMarkdown = async (fileId) => {
+exports.getInventoryFromMarkdown = async (fileId, search = '') => {
   try {
+    // Tetap menggunakan pembaca file bawaan proyekmu agar tidak merusak sistem
     const content = await readMDFileById(fileId);
     const lines = content.split('\n');
     let allItems = [];
@@ -139,7 +140,8 @@ exports.getInventoryFromMarkdown = async (fileId) => {
             }
           }
 
-          allItems.push({
+          // Buat objek item sesuai struktur asli kamu
+          const itemObj = {
             id: itemCode,
             item_code: itemCode,
             name: itemName,
@@ -151,7 +153,24 @@ exports.getInventoryFromMarkdown = async (fileId) => {
             status: qty <= 0 ? 'Out of Stock' : (qty <= 5 ? 'Low Stock' : 'In Stock'),
             value: unit_value * qty,
             pos: pos
-          });
+          };
+
+          // ========================================================
+          // LOGIKA FILTER SEARCH (Hanya filter jika kata kunci dikirim)
+          // ========================================================
+          if (search) {
+            const query = search.toLowerCase().trim();
+            const matchCode = itemObj.item_code.toLowerCase().includes(query);
+            const matchName = itemObj.name.toLowerCase().includes(query);
+            const matchLocation = itemObj.location.toLowerCase().includes(query);
+
+            // Jika kata kunci dicari tapi tidak cocok sama sekali, lewati item ini
+            if (!matchCode && !matchName && !matchLocation) {
+              continue;
+            }
+          }
+
+          allItems.push(itemObj);
         }
       }
     }

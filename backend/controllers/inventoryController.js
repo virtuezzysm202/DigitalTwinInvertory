@@ -3,15 +3,19 @@ const inventoryService = require('../services/inventory/inventoryService');
 exports.getAllInventory = async (req, res) => {
   try {
     const userId = req.user.id;
+    // 1. Tangkap keyword search dari query parameter URL (?search=...)
+    const searchKeyword = req.query.search || '';
 
     const fileMeta = await inventoryService.getMarkdownMetadata(userId);
-    const items = await inventoryService.getInventoryFromMarkdown(fileMeta.id) || [];
     
-    // 1. AMBIL DAFTAR ZONA ASLI DARI FILE SEPERTI DI ENDPOINT GET AVAILABLE ZONES
+    // 2. Oper searchKeyword ke dalam service agar data langsung terfilter
+    const items = await inventoryService.getInventoryFromMarkdown(fileMeta.id, searchKeyword) || [];
+    
+    // AMBIL DAFTAR ZONA ASLI DARI FILE SEPERTI DI ENDPOINT GET AVAILABLE ZONES
     const actualZones = await inventoryService.getZonesFromMarkdown(fileMeta.id) || [];
     const globalTotalZones = actualZones.length; // SINKRON! Menghitung zona asli, bukan dari lokasi barang
 
-    // Hitung sisa metrik lainnya
+    // Hitung sisa metrik lainnya (Metrik ini otomatis ikut menyesuaikan dengan hasil search)
     const globalLowStock = items.filter(item => item.status === "Low Stock" || item.qty <= 5).length;
     
     const globalTotalValue = items.reduce((acc, item) => {

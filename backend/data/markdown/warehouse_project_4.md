@@ -1,7 +1,7 @@
 # TWINSTOCK DIGITAL TWIN
 
 ## [Zone] Loading Dock Inbound (W: 200, H: 150, X: 30, Y: 30)
-- ITEM-01 | Palet Raw Material | qty: 25 | unit_value: 45000 | pos: 30, 40
+- ITEM-01 | Palet Raw Material | qty: 5 | unit_value: 45000 | pos: 30, 40
 
 ## [Zone] Rak Sektor Utara (W: 450, H: 220, X: 260, Y: 30)
 - K2 | Kulkas Kecil | qty: 100 | unit_value: 1000 | pos: 90, 90
