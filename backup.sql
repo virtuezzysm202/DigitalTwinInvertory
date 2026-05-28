@@ -28,6 +28,7 @@ CREATE TABLE markdown_files (
     project_id INT NOT NULL,
     filename VARCHAR(150) NOT NULL,
     filepath VARCHAR(255) NOT NULL,
+    content LONGTEXT DEFAULT '',
     last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_markdown_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
