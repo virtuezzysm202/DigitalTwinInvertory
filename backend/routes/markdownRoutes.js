@@ -13,3 +13,8 @@ router.post('/create-project', authMiddleware, fileUpload(), markdownController.
 router.get('/stats', authMiddleware, markdownController.getDashboardStats);
 
 module.exports = router;
+
+router.get('/files', authMiddleware, markdownController.getAllMarkdownFiles);
+router.post('/files', authMiddleware, markdownController.createMarkdownFile);
+router.delete('/files/:fileId', authMiddleware, markdownController.deleteMarkdownFile);
+router.get('/files/:fileId', authMiddleware, markdownController.getMarkdownFileById);

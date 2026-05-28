@@ -189,7 +189,7 @@ exports.parseRawMarkdown = (req, res) => {
 // 4. POST /api/markdown/save (Menyimpan data & mencatat ke log aktivitas)
 exports.saveMarkdownLayout = async (req, res) => {
   try {
-    const { markdown, projectId } = req.body; 
+    const { markdown, projectId, fileId } = req.body;
     const userId = req.user.id;
 
     if (!markdown) {
@@ -199,13 +199,23 @@ exports.saveMarkdownLayout = async (req, res) => {
       return res.status(400).json({ success: false, message: 'ID Proyek wajib disertakan untuk menyimpan.' });
     }
 
-    const [files] = await db.query(
-      `SELECT mf.* FROM markdown_files mf
-       JOIN projects p ON mf.project_id = p.id
-       WHERE p.id = ? AND p.user_id = ?`, 
-      [projectId, userId]
-    );
-    let fileRecord = files[0];
+    let files;
+      if (fileId) {
+        [files] = await db.query(
+          `SELECT mf.* FROM markdown_files mf
+          JOIN projects p ON mf.project_id = p.id
+          WHERE mf.id = ? AND p.user_id = ?`,
+          [fileId, userId]
+        );
+      } else {
+        [files] = await db.query(
+          `SELECT mf.* FROM markdown_files mf
+          JOIN projects p ON mf.project_id = p.id
+          WHERE p.id = ? AND p.user_id = ?`,
+          [projectId, userId]
+        );
+      }
+      let fileRecord = files[0];
 
     if (!fileRecord) {
       return res.status(404).json({ success: false, message: 'File markdown proyek tidak ditemukan.' });
@@ -252,42 +262,177 @@ exports.saveMarkdownLayout = async (req, res) => {
   }
 };
 
-// 5. GET /api/markdown/stats
-exports.getDashboardStats = async (req, res) => {
+      // 5. GET /api/markdown/stats
+      exports.getDashboardStats = async (req, res) => {
+        try {
+          const userId = req.user.id;
+
+          const fileMeta = await inventoryService.getMarkdownMetadata(userId);
+          if (!fileMeta) {
+            return res.status(200).json({
+              success: true,
+              stats: { totalItems: 0, totalZones: 0, lowStock: 0, totalValue: 0, utilization: 0 }
+            });
+          }
+
+          const items = await inventoryService.getInventoryFromMarkdown(fileMeta.id) || [];
+
+          const totalItems = items.length;
+          const lowStock = items.filter(item => item.status === 'Low Stock').length;
+          const totalValue = items.reduce((acc, item) => acc + Number(item.value || 0), 0);
+          
+          // Mapping zona berdasarkan nama lokasi unik
+          const totalZones = new Set(
+            items.filter(item => item.location).map(item => item.location.trim().toLowerCase())
+          ).size;
+
+          return res.status(200).json({
+            success: true,
+            stats: {
+              totalItems, 
+              totalZones, 
+              lowStock, 
+              totalValue,
+              utilization: totalItems > 0 ? 45.5 : 0
+            }
+          });
+        } catch (error) {
+          console.error("Error di getDashboardStats (Terintegrasi):", error);
+          return res.status(500).json({ success: false, message: "Gagal memuat statistik dashboard terpadu." });
+      }
+    };
+
+    // 6. GET /api/markdown/files
+exports.getAllMarkdownFiles = async (req, res) => {
   try {
     const userId = req.user.id;
+    const [files] = await db.query(
+      `SELECT mf.id, mf.filename, mf.filepath, mf.created_at, p.name as project_name, p.id as project_id
+       FROM markdown_files mf
+       JOIN projects p ON mf.project_id = p.id
+       WHERE p.user_id = ?
+       ORDER BY mf.created_at DESC`,
+      [userId]
+    );
 
-    const fileMeta = await inventoryService.getMarkdownMetadata(userId);
-    if (!fileMeta) {
-      return res.status(200).json({
-        success: true,
-        stats: { totalItems: 0, totalZones: 0, lowStock: 0, totalValue: 0, utilization: 0 }
-      });
+    // Hitung totalZones & totalItems dari setiap file
+    const filesWithStats = await Promise.all(files.map(async (file) => {
+      try {
+        const absolutePath = getAbsoluteFilePath(file.filepath);
+        const markdownText = await fs.readFile(absolutePath, 'utf-8');
+        const jsonRuntime = parseMarkdownToJSON(markdownText);
+        const totalZones = jsonRuntime?.zones?.length || 0;
+        const totalItems = jsonRuntime?.zones?.reduce((sum, z) => sum + (z.items?.length || 0), 0) || 0;
+        const totalLines = markdownText.split('\n').length;
+        return { ...file, totalZones, totalItems, totalLines };
+      } catch {
+        return { ...file, totalZones: 0, totalItems: 0, totalLines: 0 };
+      }
+    }));
+
+    return res.status(200).json({ success: true, files: filesWithStats });
+  } catch (error) {
+    console.error('Error getAllMarkdownFiles:', error);
+    return res.status(500).json({ success: false, message: 'Gagal mengambil daftar file.' });
+  }
+};
+
+// 7. POST /api/markdown/files
+exports.createMarkdownFile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { filename } = req.body;
+
+    if (!filename) return res.status(400).json({ success: false, message: 'Nama file wajib diisi.' });
+
+    let [projects] = await db.query('SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [userId]);
+    let project = projects[0];
+    if (!project) {
+      const [newProj] = await db.query('INSERT INTO projects (user_id, name, description) VALUES (?, ?, ?)', [userId, 'Gudang Utama', '']);
+      const [fetched] = await db.query('SELECT * FROM projects WHERE id = ?', [newProj.insertId]);
+      project = fetched[0];
     }
 
-    const items = await inventoryService.getInventoryFromMarkdown(fileMeta.id) || [];
+    const safeFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
+    const relativePath = `data/markdown/${safeFilename}`;
+    const absolutePath = getAbsoluteFilePath(relativePath);
 
-    const totalItems = items.length;
-    const lowStock = items.filter(item => item.status === 'Low Stock').length;
-    const totalValue = items.reduce((acc, item) => acc + Number(item.value || 0), 0);
-    
-    // Mapping zona berdasarkan nama lokasi unik
-    const totalZones = new Set(
-      items.filter(item => item.location).map(item => item.location.trim().toLowerCase())
-    ).size;
+    const [existing] = await db.query('SELECT id FROM markdown_files WHERE filepath = ?', [relativePath]);
+    if (existing.length > 0) return res.status(409).json({ success: false, message: 'Nama file sudah digunakan.' });
+
+    const defaultContent = `# [Room] ${filename} (W: 800, H: 600)\n\n## [Zone] Default Zone | W: 300 | H: 200 | X: 50 | Y: 50\n- ITEM-01 | Contoh Item | qty: 0 | unit_value: 0 | pos: 30, 45`;
+
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.writeFile(absolutePath, defaultContent, 'utf-8');
+
+    const [result] = await db.query(
+      'INSERT INTO markdown_files (project_id, filename, filepath) VALUES (?, ?, ?)',
+      [project.id, safeFilename, relativePath]
+    );
+
+    return res.status(201).json({ success: true, message: 'File berhasil dibuat!', fileId: result.insertId });
+  } catch (error) {
+    console.error('Error createMarkdownFile:', error);
+    return res.status(500).json({ success: false, message: 'Gagal membuat file baru.' });
+  }
+};
+
+// 8. DELETE /api/markdown/files/:fileId
+exports.deleteMarkdownFile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { fileId } = req.params;
+
+    const [files] = await db.query(
+      `SELECT mf.* FROM markdown_files mf
+       JOIN projects p ON mf.project_id = p.id
+       WHERE mf.id = ? AND p.user_id = ?`,
+      [fileId, userId]
+    );
+    const fileRecord = files[0];
+    if (!fileRecord) return res.status(404).json({ success: false, message: 'File tidak ditemukan.' });
+
+    const absolutePath = getAbsoluteFilePath(fileRecord.filepath);
+    try { await fs.unlink(absolutePath); } catch (_) {}
+
+    await db.query('DELETE FROM markdown_files WHERE id = ?', [fileId]);
+
+    return res.status(200).json({ success: true, message: 'File berhasil dihapus.' });
+  } catch (error) {
+    console.error('Error deleteMarkdownFile:', error);
+    return res.status(500).json({ success: false, message: 'Gagal menghapus file.' });
+  }
+};
+
+// 9. GET /api/markdown/files/:fileId
+exports.getMarkdownFileById = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { fileId } = req.params;
+
+    const [files] = await db.query(
+      `SELECT mf.*, p.name as project_name FROM markdown_files mf
+       JOIN projects p ON mf.project_id = p.id
+       WHERE mf.id = ? AND p.user_id = ?`,
+      [fileId, userId]
+    );
+    const fileRecord = files[0];
+    if (!fileRecord) return res.status(404).json({ success: false, message: 'File tidak ditemukan.' });
+
+    const absolutePath = getAbsoluteFilePath(fileRecord.filepath);
+    const markdownText = await fs.readFile(absolutePath, 'utf-8');
+    const jsonRuntime = parseMarkdownToJSON(markdownText);
 
     return res.status(200).json({
       success: true,
-      stats: {
-        totalItems, 
-        totalZones, 
-        lowStock, 
-        totalValue,
-        utilization: totalItems > 0 ? 45.5 : 0
-      }
+      fileId: fileRecord.id,
+      filename: fileRecord.filename,
+      projectId: fileRecord.project_id,
+      rawMarkdown: markdownText,
+      data: jsonRuntime
     });
   } catch (error) {
-    console.error("Error di getDashboardStats (Terintegrasi):", error);
-    return res.status(500).json({ success: false, message: "Gagal memuat statistik dashboard terpadu." });
+    console.error('Error getMarkdownFileById:', error);
+    return res.status(500).json({ success: false, message: 'Gagal membaca file.' });
   }
 };
