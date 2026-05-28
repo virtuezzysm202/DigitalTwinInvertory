@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Save, Sparkles, Send, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { Stage, Layer, Line, Text, Group, Circle } from 'react-konva';
+import { useSearchParams } from 'react-router-dom';
 
 export default function Layout2D() {
   const [chatInput, setChatInput] = useState('');
@@ -10,7 +11,10 @@ export default function Layout2D() {
   const [zones, setZones] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true); 
-
+  const [currentFilename, setCurrentFilename] = useState('warehouse.md');
+  const [currentFileId, setCurrentFileId] = useState(null);
+  const [searchParams] = useSearchParams();
+  const fileIdFromUrl = searchParams.get('fileId');
   const [scale, setScale] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   
@@ -61,8 +65,11 @@ export default function Layout2D() {
   // ==========================================
   const fetchActiveLayout = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/markdown/layout', getAuthHeader());
-      
+      const endpoint = fileIdFromUrl
+      ? `http://localhost:5000/api/markdown/files/${fileIdFromUrl}`
+      : 'http://localhost:5000/api/markdown/layout';
+    const response = await axios.get(endpoint, getAuthHeader());
+
       if (response.data) {
         if (response.data.projectId) {
           setProjectId(response.data.projectId);
@@ -71,7 +78,13 @@ export default function Layout2D() {
         if (response.data.rawMarkdown) {
           setMarkdownCode(response.data.rawMarkdown);
         }
-        
+        if (response.data.filename) {
+          setCurrentFilename(response.data.filename);
+        }
+        if (response.data.fileId) {
+          setCurrentFileId(response.data.fileId);
+        }
+
         const runtimeData = response.data.data;
         if (runtimeData && runtimeData.zones && Array.isArray(runtimeData.zones)) {
           const formattedZones = transformBackendZones(runtimeData.zones);
@@ -244,7 +257,8 @@ export default function Layout2D() {
 
       await axios.post(`http://localhost:5000/api/markdown/save`, { 
         markdown: markdownCode,
-        projectId: projectId, 
+        projectId: projectId,
+        fileId: currentFileId,
         items: extractedItems
       }, getAuthHeader());
 
@@ -261,7 +275,10 @@ export default function Layout2D() {
       <div className="bg-white px-4 py-3 border-b border-gray-200 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-lg sm:text-xl font-bold text-gray-800">Main Warehouse Layout</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-800">
+          {currentFilename}
+        </h1>
+
             <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full">Active</span>
           </div>
         </div>
@@ -282,7 +299,7 @@ export default function Layout2D() {
         
         {/* Left Side: Markdown Code Editor */}
         <div className={`${activeTab === 'editor' ? 'flex' : 'hidden'} md:flex md:w-[32%] bg-white border border-gray-200 rounded-lg flex-col shadow-sm overflow-hidden shrink-0 w-full h-full`}>
-          <div className="flex bg-gray-100 border-b border-gray-200 px-4 py-2 text-sm font-medium text-gray-700">warehouse.md</div>
+        <div className="flex bg-gray-100 border-b border-gray-200 px-4 py-2 text-sm font-medium text-gray-700">{currentFilename}</div>
           <textarea
             value={markdownCode}
             onChange={(e) => setMarkdownCode(e.target.value)}
