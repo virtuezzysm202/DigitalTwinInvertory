@@ -1,326 +1,275 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { 
-  Box, Map, Package, Activity, Bell, HelpCircle, 
-  Plus, MoreVertical, LayoutTemplate, Upload, FileText
+import {
+  Box, Map, Package, Activity, Bell, HelpCircle,
+  Plus, LayoutTemplate, Upload, FileText, Trash2, AlertTriangle
 } from 'lucide-react';
 
 export default function Dashboard() {
-  // --- STATE MANAGEMENT ---
-  const [isOpen, setIsOpen] = useState(false);
+  const [stats, setStats] = useState({ totalItems: 0, totalZones: 0, lowStock: 0, utilization: 0 });
+  const [projectData, setProjectData] = useState(null);
+  const [hasLayout, setHasLayout] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(true);
+
+  // Modal create
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [fileSelected, setFileSelected] = useState(null);
-  const [loading, setLoading] = useState(false);
-  
-  const [recentLayouts, setRecentLayouts] = useState([]);
-  const [stats, setStats] = useState({
-    totalItems: 0,
-    totalZones: 0,
-    lowStock: 0,
-    utilization: 0
-  });
-  const [fetchLoading, setFetchLoading] = useState(true);
+  const [createLoading, setCreateLoading] = useState(false);
 
-  // --- AMBIL DATA INVENTORY (DENGAN ANTI-CACHE) ---
-  const fetchInventoryData = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+  // Modal delete konfirmasi
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
+  const token = () => localStorage.getItem('token');
+  const authHeader = () => ({ headers: { Authorization: `Bearer ${token()}` } });
+
+  const fetchProjectStatus = useCallback(async () => {
     try {
-      // FIX: Tambahkan parameter t=${Date.now()} untuk mematikan cache browser (Bypass Cache)
-      const response = await axios.get(`http://localhost:5000/api/inventory?limit=1&t=${Date.now()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      }); 
-      
-      if (response.data && response.data.success) {
-        const resData = response.data;
-        const totalItemsVal = Number(resData.totalItems ?? 0);
-        const totalZonesVal = Number(resData.globalTotalZones ?? 0);
-        const lowStockVal = Number(resData.globalLowStock ?? 0);
-
-        console.log("LOG DASHBOARD - Data Baru Masuk UI:", { totalItemsVal, totalZonesVal, lowStockVal });
-
-        setStats({
-          totalItems: totalItemsVal,
-          totalZones: totalZonesVal,
-          lowStock: lowStockVal,
-          utilization: totalItemsVal > 0 ? 45.5 : 0
-        });
+      const res = await axios.get('http://localhost:5000/api/markdown/project/status', authHeader());
+      if (res.data.success) {
+        setHasLayout(res.data.hasLayout);
+        setProjectData(res.data.project || null);
       }
     } catch (err) {
-      console.error("Gagal memuat inventory di dashboard:", err);
-    } finally {
-      setFetchLoading(false);
+      console.error('Gagal load project status:', err);
     }
   }, []);
 
-  // --- AMBIL DATA LAYOUT (DENGAN ANTI-CACHE) ---
-  const fetchLayoutData = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
+  const fetchStats = useCallback(async () => {
     try {
-      // FIX: Tambahkan parameter t=${Date.now()} agar backend memberikan metadata file terbaru
-      const response = await axios.get(`http://localhost:5000/api/markdown/layout?t=${Date.now()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (response.data && response.data.success) {
-        // Ambil data nama ruangan atau nama proyek secara dinamis dari respons berkas aktif
-        const layoutName = response.data.data?.room?.name || response.data.projectName || "Gudang Utama (Aktif)";
-        const layoutDesc = response.data.data?.room?.description || description || "Active Layout Workspace";
-        
-        setRecentLayouts([
-          {
-            id: response.data.projectId || 'active-project',
-            name: layoutName,
-            description: layoutDesc,
-            updated_at: response.data.updatedAt || new Date().toISOString()
-          }
-        ]);
-      }
+      const res = await axios.get('http://localhost:5000/api/markdown/stats', authHeader());
+      if (res.data.success) setStats(res.data.stats);
     } catch (err) {
-      console.log("Layout 304 / Menggunakan file fallback default.");
+      console.error('Gagal load stats:', err);
     }
-  }, [description]);
+  }, []);
 
-  // Eksekusi Independent Lifecycle
   useEffect(() => {
-    fetchInventoryData();
-    fetchLayoutData();
-  }, [fetchInventoryData, fetchLayoutData]);
+    Promise.all([fetchProjectStatus(), fetchStats()]).finally(() => setFetchLoading(false));
+  }, [fetchProjectStatus, fetchStats]);
 
-  // --- HANDLER SUBMIT MODAL ---
   const handleCreateLayout = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return alert('Nama gudang wajib diisi!');
-
+    if (!name.trim()) return alert('Nama layout wajib diisi!');
+    setCreateLoading(true);
     try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) return alert('Sesi habis, silakan login kembali.');
-      
       const formData = new FormData();
       formData.append('name', name);
       formData.append('description', description);
       if (fileSelected) formData.append('markdownFile', fileSelected);
 
-      const response = await axios.post(
-        'http://localhost:5000/api/markdown/create-project',
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
+      const res = await axios.post('http://localhost:5000/api/markdown/create-project', formData, {
+        headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'multipart/form-data' }
+      });
 
-      if (response.data.success) {
-        alert(response.data.message || 'Layout berhasil dibuat!');
-        setIsOpen(false);
-        setName('');
-        setDescription('');
-        setFileSelected(null);
-        
-        // Paksa refresh data setelah file markdown baru sukses diupload
-        fetchInventoryData();
-        fetchLayoutData();
+      if (res.data.success) {
+        setShowCreateModal(false);
+        setName(''); setDescription(''); setFileSelected(null);
+        await Promise.all([fetchProjectStatus(), fetchStats()]);
       }
-    } catch (error) {
-      alert(error.response?.data?.message || 'Gagal membuat layout baru.');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal membuat layout.');
     } finally {
-      setLoading(false);
+      setCreateLoading(false);
+    }
+  };
+
+  const handleDeleteLayout = async () => {
+    setDeleteLoading(true);
+    try {
+      await axios.delete('http://localhost:5000/api/markdown/project', authHeader());
+      setShowDeleteModal(false);
+      setHasLayout(false);
+      setProjectData(null);
+      setStats({ totalItems: 0, totalZones: 0, lowStock: 0, utilization: 0 });
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal menghapus layout.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-gray-50/50 p-4 sm:p-6 space-y-6">
-      
+
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start gap-4 sm:gap-0">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Dashboard</h1>
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Overview of your inventory and spaces</p>
         </div>
-        <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3">
-          <button 
-            onClick={() => setIsOpen(true)}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-green-800 transition-colors shadow-sm w-full sm:w-auto"
-          >
-            <Plus size={16} /> New Layout
-          </button>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
-              <Bell size={18} />
+        <div className="flex items-center gap-3">
+          {!hasLayout && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 transition-colors shadow-sm"
+            >
+              <Plus size={16} /> New Layout
             </button>
-            <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
-              <HelpCircle size={18} />
-            </button>
-          </div>
+          )}
+          <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><Bell size={18} /></button>
+          <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><HelpCircle size={18} /></button>
         </div>
       </div>
 
       {/* STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Items */}
         <div className="bg-green-50/50 p-4 sm:p-5 rounded-2xl border border-green-100 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-green-100 text-green-700 rounded-xl"><Box size={22} /></div>
           <div>
             <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Total Items</p>
-            <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-0.5">{(stats.totalItems).toLocaleString()} Items</h3>
-            <p className="text-[10px] sm:text-xs text-green-600 font-medium">Live sync data</p>
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800">{stats.totalItems.toLocaleString()} Items</h3>
+            <p className="text-[10px] sm:text-xs text-green-600 font-medium">From all markdown files</p>
           </div>
         </div>
-
-        {/* Total Zones */}
         <div className="bg-blue-50/50 p-4 sm:p-5 rounded-2xl border border-blue-100 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-blue-100 text-blue-700 rounded-xl"><Map size={22} /></div>
           <div>
             <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Total Zones</p>
-            <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-0.5">{stats.totalZones} Zones</h3>
-            <p className="text-[10px] sm:text-xs text-gray-500">Dynamic Area Map</p>
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800">{stats.totalZones} Zones</h3>
           </div>
         </div>
-
-        {/* Low Stock */}
         <div className="bg-orange-50/50 p-4 sm:p-5 rounded-2xl border border-orange-100 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-orange-100 text-orange-700 rounded-xl"><Package size={22} /></div>
           <div>
             <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Low Stock</p>
-            <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-0.5">{stats.lowStock} Items</h3>
-            <p className="text-[10px] sm:text-xs text-red-500 font-medium">Needs attention</p>
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800">{stats.lowStock} Items</h3>
           </div>
         </div>
-
-        {/* Utilization */}
         <div className="bg-purple-50/50 p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-purple-100 text-purple-700 rounded-xl"><Activity size={22} /></div>
           <div>
             <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Utilization</p>
-            <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-0.5">{stats.utilization}%</h3>
-            <p className="text-[10px] sm:text-xs text-purple-600 font-medium">Space status</p>
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800">{stats.utilization}%</h3>
           </div>
         </div>
       </div>
 
-      {/* RECENT LAYOUTS */}
-      <div className="w-full">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 flex flex-col min-h-[400px]">
-          <div className="flex justify-between items-center mb-4 sm:mb-6">
-            <h2 className="text-base sm:text-lg font-bold text-gray-800">Recent Layouts</h2>
-            <button className="text-xs sm:text-sm font-medium text-green-700 hover:text-green-800">View All</button>
-          </div>
-          
-          <div className="flex-1 space-y-3 overflow-y-auto max-h-[500px] pr-1">
-            {fetchLoading ? (
-              <p className="text-xs sm:text-sm text-gray-400 text-center py-16 animate-pulse">Memuat data gudang...</p>
-            ) : recentLayouts.length === 0 ? (
-              <p className="text-xs sm:text-sm text-gray-400 text-center py-16">Belum ada layout. Klik "New Layout" untuk buat baru.</p>
-            ) : (
-              recentLayouts.map((layout) => (
-                <div key={layout.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors group cursor-pointer border border-gray-100/50 lg:border-transparent hover:border-gray-100">
-                  <div className="flex items-center gap-4 overflow-hidden">
-                    <div className="w-14 h-11 sm:w-16 sm:h-12 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-center text-gray-400 shrink-0">
-                      <LayoutTemplate size={18} />
-                    </div>
-                    <div className="overflow-hidden">
-                      <h3 className="font-bold text-gray-800 text-xs sm:text-sm truncate">{layout.name}</h3>
-                      <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate">
-                        {layout.description || 'No description'} &bull; {new Date(layout.updated_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 bg-green-50 text-green-700 border border-green-200 text-[10px] font-bold rounded-full">
-                      Active
-                    </span>
-                    <button className="p-1 text-gray-400 hover:text-gray-800 block lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                      <MoreVertical size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+      {/* LAYOUT CARD */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-base sm:text-lg font-bold text-gray-800">Active Layout</h2>
         </div>
-      </div>
 
-      {/* FLOATING MODAL */}
-      {isOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm sm:max-w-md shadow-xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-3 sm:px-6 sm:py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="font-bold text-gray-800 text-sm sm:text-base">Inisialisasi Layout Baru</h3>
-              <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none">&times;</button>
+        {fetchLoading ? (
+          <p className="text-sm text-gray-400 text-center py-10 animate-pulse">Memuat data layout...</p>
+        ) : !hasLayout ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center gap-4">
+            <LayoutTemplate size={40} className="text-gray-200" />
+            <div>
+              <p className="text-sm font-semibold text-gray-500">Belum ada layout</p>
+              <p className="text-xs text-gray-400 mt-1">Klik "New Layout" untuk mulai buat denah gudang</p>
             </div>
-            
-            <form onSubmit={handleCreateLayout} className="p-5 sm:p-6 space-y-4">
-              <div>
-                <label className="block text-[10px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Nama Gudang / Layout *</label>
-                <input 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  placeholder="Contoh: Gudang Hub Bandung" 
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs sm:text-sm outline-none focus:border-green-600 focus:bg-white transition-all text-gray-800" 
-                  required 
-                />
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 transition-colors"
+            >
+              <Plus size={16} /> Buat Layout Pertama
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-green-100 border border-green-200 rounded-xl flex items-center justify-center text-green-600">
+                <LayoutTemplate size={22} />
               </div>
-
               <div>
-                <label className="block text-[10px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Deskripsi Singkat</label>
-                <textarea 
-                  value={description} 
-                  onChange={(e) => setDescription(e.target.value)} 
-                  placeholder="Tulis catatan lokasi gudang..." 
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs sm:text-sm outline-none focus:border-green-600 focus:bg-white transition-all text-gray-800 h-16 sm:h-20 resize-none" 
-                />
+                <h3 className="font-bold text-gray-800 text-sm">{projectData?.name}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {projectData?.file_count || 0} file .md &bull; {projectData?.description || 'No description'}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Dibuat: {new Date(projectData?.created_at).toLocaleDateString('id-ID')}
+                </p>
               </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 bg-green-50 text-green-700 border border-green-200 text-[10px] font-bold rounded-full">Active</span>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-500 rounded-lg text-xs font-medium hover:bg-red-50 transition-colors"
+              >
+                <Trash2 size={13} /> Hapus Layout
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
-              <div className="pt-1">
-                <label className="block text-[10px] sm:text-xs font-bold text-gray-500 uppercase mb-1.5">Upload File .md (Opsional)</label>
-                <div className="border-2 border-dashed border-gray-200 rounded-xl p-3 sm:p-4 bg-gray-50 text-center hover:bg-gray-100/70 transition-all relative cursor-pointer">
-                  <input 
-                    type="file" 
-                    accept=".md" 
-                    onChange={(e) => setFileSelected(e.target.files[0])} 
-                    className="absolute inset-0 opacity-0 cursor-pointer z-10" 
-                  />
-                  <div className="flex flex-col items-center justify-center gap-1 text-gray-500">
+      {/* MODAL CREATE LAYOUT */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800">Buat Layout Baru</h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <form onSubmit={handleCreateLayout} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Nama Gudang / Layout *</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                  placeholder="Contoh: Gudang Hub Bandung"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-600 focus:bg-white transition-all"
+                  required />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Deskripsi</label>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Catatan lokasi gudang..."
+                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-600 focus:bg-white transition-all h-20 resize-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Upload File .md (Opsional)</label>
+                <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 bg-gray-50 text-center hover:bg-gray-100 transition-all relative cursor-pointer">
+                  <input type="file" accept=".md" onChange={(e) => setFileSelected(e.target.files[0])}
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                  <div className="flex flex-col items-center gap-1 text-gray-500">
                     {fileSelected ? (
-                      <>
-                        <FileText size={20} className="text-green-600 animate-bounce" />
-                        <p className="text-[11px] sm:text-xs font-semibold text-gray-700 truncate max-w-[200px]">{fileSelected.name}</p>
-                      </>
+                      <><FileText size={20} className="text-green-600" /><p className="text-xs font-semibold text-gray-700">{fileSelected.name}</p></>
                     ) : (
-                      <>
-                        <Upload size={18} className="text-gray-400" />
-                        <p className="text-[11px] sm:text-xs font-medium text-gray-600">Klik / seret file .md ke sini</p>
-                      </>
+                      <><Upload size={18} className="text-gray-400" /><p className="text-xs text-gray-500">Klik atau seret file .md ke sini</p></>
                     )}
                   </div>
                 </div>
               </div>
-
-              <div className="flex gap-2 pt-2 justify-end text-xs sm:text-sm">
-                <button 
-                  type="button" 
-                  onClick={() => setIsOpen(false)} 
-                  className="px-4 py-2 border border-gray-200 text-gray-600 font-medium rounded-lg hover:bg-gray-50 transition-all"
-                >
-                  Batal
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={loading} 
-                  className="px-4 py-2 bg-green-700 hover:bg-green-800 text-white font-medium rounded-lg transition-all disabled:bg-gray-300"
-                >
-                  {loading ? 'Memproses...' : fileSelected ? 'Import Layout' : 'Buat Baru'}
+              <div className="flex gap-2 pt-1 justify-end">
+                <button type="button" onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50">Batal</button>
+                <button type="submit" disabled={createLoading}
+                  className="px-4 py-2 bg-green-700 hover:bg-green-800 text-white text-sm font-medium rounded-lg disabled:bg-gray-300">
+                  {createLoading ? 'Memproses...' : fileSelected ? 'Import Layout' : 'Buat Baru'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DELETE KONFIRMASI */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-red-100 rounded-xl"><AlertTriangle size={20} className="text-red-500" /></div>
+              <h3 className="font-bold text-gray-800">Hapus Layout?</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-1">Aksi ini akan menghapus:</p>
+            <ul className="text-sm text-red-500 font-medium mb-4 space-y-0.5 ml-4 list-disc">
+              <li>Layout <span className="font-bold">{projectData?.name}</span></li>
+              <li>Semua {projectData?.file_count || 0} file .md di dalamnya</li>
+              <li>Seluruh inventory logs terkait</li>
+            </ul>
+            <p className="text-xs text-gray-400 mb-5">Aksi ini tidak bisa dibatalkan.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setShowDeleteModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">Batal</button>
+              <button onClick={handleDeleteLayout} disabled={deleteLoading}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60">
+                {deleteLoading ? 'Menghapus...' : 'Ya, Hapus Semua'}
+              </button>
+            </div>
           </div>
         </div>
       )}

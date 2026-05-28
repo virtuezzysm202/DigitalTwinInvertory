@@ -1,4 +1,3 @@
--- Membuat Database
 CREATE DATABASE IF NOT EXISTS twinstock_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE twinstock_db;
 
@@ -19,7 +18,8 @@ CREATE TABLE projects (
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_project_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    CONSTRAINT fk_project_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_user_layout (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 3. TABEL MARKDOWN_FILES

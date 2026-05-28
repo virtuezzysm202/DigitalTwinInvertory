@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText, HardDrive, Code, RefreshCw,
   Maximize, Trash2, Plus, X, CheckCircle,
-  AlertCircle, ChevronRight, Layers
+  AlertCircle, ChevronRight, Layers, Pencil
 } from 'lucide-react';
 
 export default function MarkdownDocs() {
@@ -27,6 +27,12 @@ export default function MarkdownDocs() {
   const [newFilename, setNewFilename] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameError, setRenameError] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+
 
   const getAuthHeader = () => {
     const token = localStorage.getItem('token');
@@ -100,6 +106,22 @@ export default function MarkdownDocs() {
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const handleRenameFile = async () => {
+    if (!renameValue.trim()) { setRenameError('Nama tidak boleh kosong.'); return; }
+    setIsRenaming(true); setRenameError('');
+    try {
+      await axios.put(`/api/markdown/files/${renameTarget.id}/rename`, { filename: renameValue.trim() }, getAuthHeader());
+      if (selectedFile?.id === renameTarget.id) {
+        const newName = renameValue.trim().endsWith('.md') ? renameValue.trim() : `${renameValue.trim()}.md`;
+        setSelectedFile(prev => ({ ...prev, filename: newName }));
+      }
+      setShowRenameModal(false); setRenameTarget(null); setRenameValue('');
+      fetchAllFiles();
+    } catch (err) {
+      setRenameError(err.response?.data?.message || 'Gagal mengubah nama.');
+    } finally { setIsRenaming(false); }
   };
 
   useEffect(() => { fetchAllFiles(); }, []);
@@ -222,6 +244,18 @@ export default function MarkdownDocs() {
                     >
                       <Trash2 size={14} />
                     </button>
+                    <button
+                      onClick={(e) => handleDeleteFile(file.id, file.filename, e)}
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 text-gray-400 transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setRenameTarget(file); setRenameValue(file.filename.replace('.md','')); setRenameError(''); setShowRenameModal(true); }}
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-blue-50 hover:text-blue-500 text-gray-400 transition-all"
+                    >
+                      <Pencil size={14} />
+                    </button>
                     <ChevronRight size={14} className={`text-gray-300 ${selectedFile?.id === file.id ? 'text-green-500' : ''}`} />
                   </div>
                 </div>
@@ -321,6 +355,37 @@ export default function MarkdownDocs() {
           )}
         </div>
       </div>
+
+      {showRenameModal && renameTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-800">Ubah Nama File</h2>
+              <button onClick={() => { setShowRenameModal(false); setRenameError(''); }} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400"><X size={18} /></button>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">Mengubah: <span className="font-semibold text-gray-700">{renameTarget.filename}</span></p>
+            <div className="space-y-1 mb-4">
+              <label className="text-xs font-semibold text-gray-600">Nama Baru</label>
+              <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:border-green-500">
+                <input type="text" value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRenameFile()}
+                  placeholder="nama-file-baru" autoFocus
+                  className="flex-1 px-3 py-2 text-sm outline-none bg-transparent" />
+                <span className="px-3 py-2 bg-gray-50 border-l border-gray-200 text-xs text-gray-400 font-mono">.md</span>
+              </div>
+              {renameError && <p className="text-xs text-red-500 mt-1">{renameError}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setShowRenameModal(false); setRenameError(''); }}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">Batal</button>
+              <button onClick={handleRenameFile} disabled={isRenaming}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
+                {isRenaming ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL BUAT FILE BARU */}
       {showCreateModal && (

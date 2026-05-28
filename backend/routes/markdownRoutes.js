@@ -18,3 +18,6 @@ router.get('/files', authMiddleware, markdownController.getAllMarkdownFiles);
 router.post('/files', authMiddleware, markdownController.createMarkdownFile);
 router.delete('/files/:fileId', authMiddleware, markdownController.deleteMarkdownFile);
 router.get('/files/:fileId', authMiddleware, markdownController.getMarkdownFileById);
+router.get('/project/status', authMiddleware, markdownController.getProjectStatus);
+router.delete('/project', authMiddleware, markdownController.deleteProject);
+router.put('/files/:fileId/rename', authMiddleware, markdownController.renameMarkdownFile);
