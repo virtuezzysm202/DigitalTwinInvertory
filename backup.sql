@@ -35,7 +35,7 @@ CREATE TABLE markdown_files (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 4. TABEL INVENTORY_LOGS
-CREATE TABLE inventory_logs (
+CREATE TABLE IF NOT EXISTS inventory_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     file_id INT NOT NULL,
     action_type VARCHAR(50) NOT NULL,

@@ -182,11 +182,15 @@ exports.saveMarkdownLayout = async (req, res) => {
     await db.query('UPDATE markdown_files SET content = ? WHERE id = ?', [markdown, fileRecord.id]);
 
     const { totalItems } = calcStats(markdown);
-    await db.query(
-      'INSERT INTO inventory_logs (file_id, action_type, item_name, quantity_before, quantity_after) VALUES (?, ?, ?, ?, ?)',
-      [fileRecord.id, 'UPDATE_LAYOUT', 'Save Changes', 0, totalItems]
-    );
-
+    try {
+      await db.query(
+        'INSERT INTO inventory_logs (file_id, action_type, item_name, quantity_before, quantity_after) VALUES (?, ?, ?, ?, ?)',
+        [fileRecord.id, 'UPDATE_LAYOUT', 'Save Changes', 0, totalItems]
+      );
+    } catch (logErr) {
+      console.warn('Log inventory gagal tapi save tetap lanjut:', logErr.message);
+    }
+    
     return res.status(200).json({ success: true, message: 'Layout berhasil disimpan!' });
   } catch (error) {
     console.error('Error saveMarkdownLayout:', error);
