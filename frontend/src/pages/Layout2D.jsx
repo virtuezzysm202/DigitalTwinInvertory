@@ -64,11 +64,15 @@ export default function Layout2D() {
   // FETCH LAYOUT DARI API BACKEND
   // ==========================================
   const fetchActiveLayout = async () => {
+    if (!fileIdFromUrl) {
+      setIsInitialLoad(false);
+      return;
+    }
     try {
-      const endpoint = fileIdFromUrl
-      ? `http://localhost:5000/api/markdown/files/${fileIdFromUrl}`
-      : 'http://localhost:5000/api/markdown/layout';
-    const response = await axios.get(endpoint, getAuthHeader());
+      const response = await axios.get(
+        `http://localhost:5000/api/markdown/files/${fileIdFromUrl}`,
+        getAuthHeader()
+      );
 
       if (response.data) {
         if (response.data.projectId) {
@@ -271,6 +275,15 @@ export default function Layout2D() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gray-50">
+    {!fileIdFromUrl && (
+      <div className="flex flex-col items-center justify-center h-full gap-3">
+        <p className="text-gray-500 text-sm font-medium">Tidak ada file yang dipilih.</p>
+        <a href="/markdown" className="px-4 py-2 bg-green-700 text-white text-sm rounded-lg hover:bg-green-800 transition-colors">
+          Pilih File di Markdown Files
+        </a>
+      </div>
+    )}
+    {fileIdFromUrl && <>
       {/* Top Header */}
       <div className="bg-white px-4 py-3 border-b border-gray-200 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">
         <div>
@@ -433,6 +446,7 @@ export default function Layout2D() {
         </div>
 
       </div>
+      </>}
     </div>
   );
 }

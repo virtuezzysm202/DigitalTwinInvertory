@@ -189,7 +189,7 @@ exports.parseRawMarkdown = (req, res) => {
 // 4. POST /api/markdown/save (Menyimpan data & mencatat ke log aktivitas)
 exports.saveMarkdownLayout = async (req, res) => {
   try {
-    const { markdown, projectId, fileId } = req.body;
+    const { markdown, projectId } = req.body; 
     const userId = req.user.id;
 
     if (!markdown) {
@@ -199,23 +199,13 @@ exports.saveMarkdownLayout = async (req, res) => {
       return res.status(400).json({ success: false, message: 'ID Proyek wajib disertakan untuk menyimpan.' });
     }
 
-    let files;
-      if (fileId) {
-        [files] = await db.query(
-          `SELECT mf.* FROM markdown_files mf
-          JOIN projects p ON mf.project_id = p.id
-          WHERE mf.id = ? AND p.user_id = ?`,
-          [fileId, userId]
-        );
-      } else {
-        [files] = await db.query(
-          `SELECT mf.* FROM markdown_files mf
-          JOIN projects p ON mf.project_id = p.id
-          WHERE p.id = ? AND p.user_id = ?`,
-          [projectId, userId]
-        );
-      }
-      let fileRecord = files[0];
+    const [files] = await db.query(
+      `SELECT mf.* FROM markdown_files mf
+       JOIN projects p ON mf.project_id = p.id
+       WHERE p.id = ? AND p.user_id = ?`, 
+      [projectId, userId]
+    );
+    let fileRecord = files[0];
 
     if (!fileRecord) {
       return res.status(404).json({ success: false, message: 'File markdown proyek tidak ditemukan.' });
