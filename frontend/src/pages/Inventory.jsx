@@ -22,6 +22,7 @@ export default function Inventory() {
   const [limit] = useState(10);
   const [globalSummary, setGlobalSummary] = useState({ lowStock: 0, totalValue: 0, totalZones: 0 });
   const [loading, setLoading] = useState(false);
+  const [hasLayout, setHasLayout] = useState(true);
 
   // Form States
   const [formData, setFormData] = useState({
@@ -43,14 +44,15 @@ export default function Inventory() {
       const response = await axios.get(`http://localhost:5000/api/inventory?page=${currentPage}&limit=${limit}&search=${search}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (response.data?.success) {
+if (response.data?.success) {
         setInventoryData(response.data.data || []);
         setTotalPages(response.data.totalPages || 1);
         setTotalItems(response.data.totalItems || 0);
+        setHasLayout(response.data.totalItems > 0 || response.data.globalTotalZones > 0);
         setGlobalSummary({
           lowStock: response.data.globalLowStock || 0,
           totalValue: response.data.globalTotalValue || 0,
-          totalZones: response.data.globalTotalZones || 1
+          totalZones: response.data.globalTotalZones || 0
         });
       }
     } catch (error) {
@@ -100,6 +102,12 @@ export default function Inventory() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-gray-50/50 space-y-6 p-4">
+      {!hasLayout && !loading && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700 flex items-center gap-2 shrink-0">
+          <span>⚠️</span>
+          <span>Belum ada layout aktif. <a href="/dashboard" className="font-semibold underline">Buat layout di Dashboard</a> lalu tambahkan file .md di Markdown Files.</span>
+        </div>
+      )}
       {/* HEADER PANEL */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4 shrink-0">
         <div>
