@@ -13,6 +13,7 @@ export default function Layout2D() {
   const [isInitialLoad, setIsInitialLoad] = useState(true); 
   const [currentFilename, setCurrentFilename] = useState('warehouse.md');
   const [currentFileId, setCurrentFileId] = useState(null);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [searchParams] = useSearchParams();
   const fileIdFromUrl = searchParams.get('fileId');
   const [scale, setScale] = useState(1);
@@ -312,7 +313,15 @@ export default function Layout2D() {
         
         {/* Left Side: Markdown Code Editor */}
         <div className={`${activeTab === 'editor' ? 'flex' : 'hidden'} md:flex md:w-[32%] bg-white border border-gray-200 rounded-lg flex-col shadow-sm overflow-hidden shrink-0 w-full h-full`}>
-        <div className="flex bg-gray-100 border-b border-gray-200 px-4 py-2 text-sm font-medium text-gray-700">{currentFilename}</div>
+        <div className="flex bg-gray-100 border-b border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 justify-between items-center">
+        <span className="truncate">{currentFilename}</span>
+        <button
+          onClick={() => setShowTutorial(true)}
+          className="ml-2 shrink-0 px-2 py-0.5 bg-white border border-gray-300 text-gray-500 rounded text-xs hover:bg-gray-50 hover:text-green-700 hover:border-green-400 transition-colors"
+        >
+          ? Sintaks
+        </button>
+      </div>
           <textarea
             value={markdownCode}
             onChange={(e) => setMarkdownCode(e.target.value)}
@@ -444,9 +453,122 @@ export default function Layout2D() {
             </button>
           </div>
         </div>
+        </div>
+
+{/* MODAL TUTORIAL SINTAKS */}
+{showTutorial && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      
+      {/* Header */}
+      <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+        <div>
+          <h2 className="text-base font-bold text-gray-800">Panduan Sintaks .md</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Format penulisan file denah gudang</p>
+        </div>
+        <button onClick={() => setShowTutorial(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 text-lg leading-none">&times;</button>
+      </div>
+
+      <div className="p-6 space-y-6">
+
+        {/* STRUKTUR UMUM */}
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Struktur File</p>
+          <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs text-slate-300 leading-6">
+            <span className="text-yellow-400"># [Room]</span> Nama Gudang (W: 800, H: 600){'\n'}
+            {'\n'}
+            <span className="text-blue-400">## [Zone]</span> Nama Zona | W: 300 | H: 200 | X: 50 | Y: 50{'\n'}
+            <span className="text-green-400">- KODE-001</span> | Nama Item | qty: 10 | unit_value: 50000 | pos: 30, 45{'\n'}
+            <span className="text-green-400">- KODE-002</span> | Nama Item 2 | qty: 5 | unit_value: 20000 | pos: 60, 45
+          </div>
+        </div>
+
+        {/* ROOM */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[10px] font-bold rounded"># ROOM</span>
+            <span className="text-xs text-gray-500">Wajib ada 1 per file, di baris pertama</span>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs text-yellow-300 mb-2">
+            # [Room] Gudang Utama (W: 800, H: 600)
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">W</span> — Lebar ruangan (px)</div>
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">H</span> — Tinggi ruangan (px)</div>
+          </div>
+        </div>
+
+        {/* ZONE */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded">## ZONE</span>
+            <span className="text-xs text-gray-500">Bisa banyak zona per file</span>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs text-blue-300 mb-2">
+            ## [Zone] Rak A | W: 300 | H: 200 | X: 50 | Y: 50
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">W</span> — Lebar zona (px)</div>
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">H</span> — Tinggi zona (px)</div>
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">X</span> — Posisi horizontal zona</div>
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">Y</span> — Posisi vertikal zona</div>
+          </div>
+        </div>
+
+        {/* ITEM */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded">- ITEM</span>
+            <span className="text-xs text-gray-500">Ditulis di dalam zona, awali dengan strip -</span>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs text-green-300 mb-2">
+            - GDT-001 | iPhone 15 Pro | qty: 10 | unit_value: 15000000 | pos: 30, 45
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">Kolom 1</span> — Kode unik item</div>
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">Kolom 2</span> — Nama item</div>
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">qty</span> — Jumlah stok</div>
+            <div className="bg-gray-50 rounded-lg p-2"><span className="font-bold text-gray-700">unit_value</span> — Harga per unit (Rp)</div>
+            <div className="bg-gray-50 rounded-lg p-2 col-span-2"><span className="font-bold text-gray-700">pos</span> — Posisi X, Y item <span className="text-gray-400">di dalam zona</span></div>
+          </div>
+        </div>
+
+        {/* CONTOH LENGKAP */}
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Contoh Lengkap</p>
+          <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs leading-6">
+            <span className="text-yellow-400"># [Room]</span><span className="text-slate-300"> Gudang Hub Bandung (W: 800, H: 600)</span>{'\n'}
+            {'\n'}
+            <span className="text-blue-400">## [Zone]</span><span className="text-slate-300"> Rak Elektronik | W: 300 | H: 200 | X: 50 | Y: 50</span>{'\n'}
+            <span className="text-green-400">- GDT-001</span><span className="text-slate-300"> | iPhone 15 Pro | qty: 10 | unit_value: 15000000 | pos: 30, 45</span>{'\n'}
+            <span className="text-green-400">- GDT-002</span><span className="text-slate-300"> | MacBook Air M2 | qty: 5 | unit_value: 18000000 | pos: 60, 45</span>{'\n'}
+            {'\n'}
+            <span className="text-blue-400">## [Zone]</span><span className="text-slate-300"> Rak Aksesoris | W: 200 | H: 150 | X: 400 | Y: 50</span>{'\n'}
+            <span className="text-green-400">- AKS-001</span><span className="text-slate-300"> | Charger USB-C | qty: 30 | unit_value: 250000 | pos: 30, 40</span>
+          </div>
+        </div>
+
+        {/* TIPS */}
+        <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-xs text-green-800 space-y-1">
+          <p className="font-bold mb-1">💡 Tips</p>
+          <p>• Kode item harus unik per file (misal: GDT-001, AKS-002)</p>
+          <p>• Posisi <span className="font-mono">pos:</span> dihitung relatif terhadap pojok kiri atas zona</p>
+          <p>• Setelah mengedit, klik <span className="font-semibold">Save Changes</span> untuk menyimpan ke database</p>
+          <p>• Preview 2D otomatis terupdate saat mengetik</p>
+        </div>
 
       </div>
-      </>}
+
+      <div className="px-6 pb-5">
+        <button onClick={() => setShowTutorial(false)} className="w-full py-2.5 bg-green-700 text-white text-sm font-medium rounded-xl hover:bg-green-800 transition-colors">
+          Mengerti, Tutup
+        </button>
+      </div>
     </div>
+  </div>
+)}
+
+</>}
+</div>
   );
 }
