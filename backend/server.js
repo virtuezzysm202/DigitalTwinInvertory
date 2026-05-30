@@ -37,6 +37,9 @@ app.get('/', (req, res) => {
   res.send('API TwinStock Backend Berjalan Normal - Arsitektur Markdown-First!');
 });
 
+const aiAssistantRoutes = require('./routes/aiAssistantRoutes');
+app.use('/api/ai', aiAssistantRoutes);
+
 // Jalankan Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
