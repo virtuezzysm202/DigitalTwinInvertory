@@ -1,0 +1,14 @@
+[
+  "check_stock",
+  "count_item",
+  "count_zone",
+  "low_stock",
+  "move_item",
+  "move_zone",
+  "resize_room",
+  "resize_zone",
+  "room_information",
+  "search_item",
+  "update_position",
+  "zone_information"
+]
