@@ -40,6 +40,9 @@ app.get('/', (req, res) => {
 const aiAssistantRoutes = require('./routes/aiAssistantRoutes');
 app.use('/api/ai', aiAssistantRoutes);
 
+const aiLayoutRoutes = require('./routes/aiLayoutRoutes');
+app.use('/api/ai', aiLayoutRoutes);
+
 // Jalankan Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

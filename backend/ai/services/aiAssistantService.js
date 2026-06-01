@@ -1,5 +1,6 @@
 const { buildInventoryContext } = require('./aiContextBuilder');
 const { formatResponse } = require('../utils/responseFormatter');
+const tensorflowBridge = require('./tensorflowBridge');
 
 // INTENT DETECTION (rule-based, nanti diganti TF model)
 
@@ -117,8 +118,29 @@ exports.processQuestion = async (userId, question) => {
       };
     }
 
-    // TODO: const intent = await tensorflowBridge.predictIntent(question);
-    const intent = detectIntent(question);
+    let intent = 'unknown';
+
+    try {
+    
+      const prediction =
+        await tensorflowBridge.predictIntent(question);
+    
+        if (prediction.success && prediction.intent) {
+          intent = prediction.intent;
+        } else {
+          intent = detectIntent(question); 
+        }
+    
+    } catch (err) {
+    
+      console.error(
+        '[AI MODEL FAILED]',
+        err.message
+      );
+    
+      intent = detectIntent(question);
+    }
+
     const handler = handlers[intent] || handlers['unknown'];
     const result = handler(context, question);
 
