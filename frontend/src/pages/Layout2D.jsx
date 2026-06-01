@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Save, Sparkles, Send, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { Stage, Layer, Line, Text, Group, Circle } from 'react-konva';
 import { useSearchParams } from 'react-router-dom';
+import { sendLayoutCommand } from '../ai/services/layoutAIApi';
 
 export default function Layout2D() {
   const [chatInput, setChatInput] = useState('');
@@ -14,6 +15,11 @@ export default function Layout2D() {
   const [currentFilename, setCurrentFilename] = useState('warehouse.md');
   const [currentFileId, setCurrentFileId] = useState(null);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [aiMessages, setAiMessages] = useState([
+    { sender: 'ai', text: 'Hi! Saya bisa membantu pindahkan item, zona, atau update posisi. Contoh: "pindahkan ITEM-01 ke zona Rak B"' }
+  ]);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const aiBottomRef = useRef(null);
   const [searchParams] = useSearchParams();
   const fileIdFromUrl = searchParams.get('fileId');
   const [scale, setScale] = useState(1);
@@ -239,6 +245,45 @@ export default function Layout2D() {
     setStagePos({ x: 0, y: 0 });
   };
 
+  const handleAiSend = async () => {
+    const q = chatInput.trim();
+    if (!q || isAiLoading) return;
+  
+    setChatInput('');
+    setAiMessages(prev => [...prev, { sender: 'user', text: q }]);
+    setIsAiLoading(true);
+  
+    try {
+      const result = await sendLayoutCommand(q);
+  
+      setAiMessages(prev => [...prev, {
+        sender: 'ai',
+        text: result.answer || 'Tidak ada jawaban.',
+        intent: result.intent
+      }]);
+  
+      // Jika ada markdown baru dari AI, update canvas langsung
+      if (result.success && result.updatedMarkdown) {
+        setMarkdownCode(result.updatedMarkdown);
+        // Tandai perlu di-save
+        setAiMessages(prev => [...prev, {
+          sender: 'ai',
+          text: '💾 Layout diperbarui di editor. Klik **Save Changes** untuk menyimpan ke database.'
+        }]);
+      }
+  
+    } catch (err) {
+      setAiMessages(prev => [...prev, {
+        sender: 'ai',
+        text: 'Gagal menghubungi AI server. Pastikan Flask (inference.py) sedang berjalan.',
+        intent: 'error'
+      }]);
+    } finally {
+      setIsAiLoading(false);
+      setTimeout(() => aiBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    }
+  };
+
   // ==========================================
   // HANDLER SAVE CHANGES (SUDAH DIPERBAIKI 🚀)
   // ==========================================
@@ -430,25 +475,81 @@ export default function Layout2D() {
           </div>
         </div>
 
-        {/* Right Side: AI Assistant Panel */}
-        <div className={`${activeTab === 'ai' ? 'flex' : 'hidden'} md:flex md:w-[240px] bg-white border border-gray-200 rounded-lg flex-col shadow-sm shrink-0 w-full h-full`}>
-          <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 text-green-700 font-bold text-sm bg-gray-50">
-            <Sparkles size={16} /> AI Assistant
-          </div>
-          <div className="flex-1 p-4 bg-white overflow-y-auto">
-            <div className="bg-blue-50 border border-blue-100 rounded-2xl rounded-tl-none p-3 text-xs text-gray-700 shadow-2xs">
-              Hi! I can assist you with your markdown code formatting and items localization. Try modifying coordinates in the text editor!
+    {/* Right Side: AI Layout Assistant Panel */}
+    <div className={`${activeTab === 'ai' ? 'flex' : 'hidden'} md:flex md:w-[240px] bg-white border border-gray-200 rounded-lg flex-col shadow-sm shrink-0 w-full h-full`}>
+          
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50 shrink-0">
+            <div className="flex items-center gap-2 text-green-700 font-bold text-sm">
+              <Sparkles size={16} /> Layout AI
             </div>
+            <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-700 font-bold rounded-full">
+              TensorFlow
+            </span>
           </div>
-          <div className="p-3 border-t border-gray-100 flex items-center gap-2">
-            <input 
-              type="text" 
-              value={chatInput} 
-              onChange={(e) => setChatInput(e.target.value)} 
-              placeholder="Ask anything..." 
-              className="flex-1 bg-transparent text-xs outline-none border border-gray-300 rounded-xl px-3 py-1.5 focus:border-green-500" 
+
+          {/* Messages */}
+          <div className="flex-1 p-3 bg-white overflow-y-auto flex flex-col gap-3">
+            {aiMessages.map((msg, idx) => (
+              <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[90%] p-2.5 text-xs leading-relaxed rounded-2xl whitespace-pre-line ${
+                  msg.sender === 'user'
+                    ? 'bg-green-700 text-white rounded-tr-sm'
+                    : msg.intent === 'error'
+                    ? 'bg-red-50 text-red-600 border border-red-100 rounded-tl-sm'
+                    : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                }`}>
+                  {msg.text.split('**').map((part, i) =>
+                    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+                  )}
+                </div>
+              </div>
+            ))}
+            {isAiLoading && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 text-gray-400 text-xs p-2.5 rounded-2xl rounded-tl-sm animate-pulse">
+                  Memproses...
+                </div>
+              </div>
+            )}
+            <div ref={aiBottomRef} />
+          </div>
+
+          {/* Suggested commands */}
+          {aiMessages.length <= 1 && (
+            <div className="px-3 pb-2 flex flex-col gap-1">
+              {[
+                'pindahkan ITEM-01 ke zona Rak B',
+                'resize zona Default Zone 400x300',
+                'update posisi ITEM-01 ke 50, 80'
+              ].map((cmd, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setChatInput(cmd); }}
+                  className="text-left text-[10px] text-green-700 bg-green-50 border border-green-100 px-2 py-1 rounded-lg hover:bg-green-100 transition-colors"
+                >
+                  {cmd}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="p-3 border-t border-gray-100 flex items-center gap-2 shrink-0">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAiSend()}
+              placeholder="Ketik perintah layout..."
+              disabled={isAiLoading}
+              className="flex-1 bg-transparent text-xs outline-none border border-gray-300 rounded-xl px-3 py-1.5 focus:border-green-500 disabled:opacity-50"
             />
-            <button className="bg-green-700 text-white p-1.5 rounded-lg hover:bg-green-800 transition-colors">
+            <button
+              onClick={handleAiSend}
+              disabled={isAiLoading || !chatInput.trim()}
+              className="bg-green-700 text-white p-1.5 rounded-lg hover:bg-green-800 transition-colors disabled:opacity-40"
+            >
               <Send size={14} />
             </button>
           </div>

@@ -142,8 +142,8 @@ export default function AIAssistant() {
         <div className="p-4 border-b border-gray-100 flex items-center gap-2 bg-gray-50/50 shrink-0">
           <Sparkles className="text-green-600" size={20} />
           <span className="font-semibold text-gray-800">TwinStock AI</span>
-          <span className="ml-auto text-[10px] px-2 py-0.5 bg-green-100 text-green-700 font-bold rounded-full">
-            Rule-based
+          <span className="ml-auto text-[10px] px-2 py-0.5 bg-purple-100 text-purple-700 font-bold rounded-full">
+            TensorFlow
           </span>
         </div>
 
