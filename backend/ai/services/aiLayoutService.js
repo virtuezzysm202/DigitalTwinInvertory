@@ -50,12 +50,12 @@ const extractTargetZone = (question, context) => {
  */
 const extractCoordinates = (question) => {
   const patterns = [
+    /(?:ke|to|posisi|position)\s+(\d+)\s*[,]\s*(\d+)/i,
     /X\s*:\s*(\d+).*?Y\s*:\s*(\d+)/i,
-    /posisi\s+(\d+)\s*[,]\s*(\d+)/i,
-    /(\d+)\s*[,]\s*(\d+)/,
+    /(\d{1,4})\s*,\s*(\d{1,4})(?!\s*\w)/, 
   ];
-  for (const pattern of patterns) {
-    const m = question.match(pattern);
+  for (const p of patterns) {
+    const m = question.match(p);
     if (m) return { x: parseInt(m[1]), y: parseInt(m[2]) };
   }
   return null;
@@ -67,12 +67,13 @@ const extractCoordinates = (question) => {
  */
 const extractDimensions = (question) => {
   const patterns = [
-    /W\s*:\s*(\d+).*?H\s*:\s*(\d+)/i,
-    /(\d+)\s*[xX×]\s*(\d+)/,
-    /(?:lebar|width)\s*[:\s]+(\d+).*?(?:tinggi|height)\s*[:\s]+(\d+)/i,
+    /(\d+)\s*[xX×]\s*(\d+)/,                          // 400x300
+    /W\s*:\s*(\d+).*?H\s*:\s*(\d+)/i,                 // W:400 H:300
+    /(?:jadi|menjadi|ke)\s+(\d+)\s*[xX×]\s*(\d+)/i,  // jadi 400x300
+    /(?:lebar|width)\s+(\d+).*?(?:tinggi|height)\s+(\d+)/i,
   ];
-  for (const pattern of patterns) {
-    const m = question.match(pattern);
+  for (const p of patterns) {
+    const m = question.match(p);
     if (m) return { w: parseInt(m[1]), h: parseInt(m[2]) };
   }
   return null;

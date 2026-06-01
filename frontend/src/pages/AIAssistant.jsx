@@ -14,7 +14,7 @@ const SUGGESTED_PROMPTS = [
 const INITIAL_MESSAGE = {
   id: 1,
   sender: 'ai',
-  text: 'Halo! Saya asisten inventory TwinStock. Tanyakan apa saja tentang stok, lokasi barang, zona, atau rekomendasi restock.',
+  text: 'Halo! Saya asisten inventory TwinStock. Tanyakan apa saja tentang stok, lokasi barang dan zona.',
   intent: null
 };
 

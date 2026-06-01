@@ -46,7 +46,13 @@ exports.buildInventoryContext = async (userId) => {
 
       // Ambil info room dari file pertama yang punya room
       if (!context.room && parsed.room) {
-        context.room = parsed.room;
+        context.room = {
+          ...parsed.room,
+          // Jika nama room kosong atau default, pakai nama file
+          name: parsed.room.name && parsed.room.name !== 'Default Warehouse'
+            ? parsed.room.name
+            : file.filename.replace('.md', '')
+        };
       }
 
       if (!parsed.zones || !Array.isArray(parsed.zones)) continue;
